@@ -5,7 +5,9 @@ set(SRC_DIR "GPU_CUDA_Distances")
 
 set(CU_SRC_FILES ${SRC_DIR}/kernel.cu)
 
-set(CPP_SRC_FILES ${SRC_DIR}/CudaHelper.cpp)
+set(CPP_SRC_FILES 
+        ${SRC_DIR}/GlobalHeader.cpp
+        ${SRC_DIR}/loader.h     ${SRC_DIR}/loader.cpp)
 
 set(CPP_MAIN ${SRC_DIR}/main.cpp)
 
