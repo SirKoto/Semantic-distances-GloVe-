@@ -5,8 +5,6 @@
 
 #include <stdio.h>
 
-extern "C" void sayHelloWorld();
-
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
