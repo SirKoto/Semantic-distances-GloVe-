@@ -3,7 +3,7 @@
 
 #include <cuda_runtime.h>
 #include <vector_types.h>
-#include <helper_cuda.h>
+
 
 
 extern "C" int runCuda();

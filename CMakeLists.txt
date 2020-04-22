@@ -25,7 +25,7 @@ SET(CUDA_NVCC_FLAGS
     -Xcompiler #Explicitly specify the language for the input files, rather than letting the compiler choose a default based on the file name suffix. Allowed values for this option: c, c++, cu. 
     -fPIC
     -use_fast_math
-    -gencode=arch=compute_20,code="sm_20,compute_20"
+    -gencode=arch=compute_75,code="sm_75,compute_75"
     --ptxas-options=-v
     #--device-debug #possibility to debug device code; uncomment for speedup
     #--debug #possibility to debug host code; uncomment for speedup

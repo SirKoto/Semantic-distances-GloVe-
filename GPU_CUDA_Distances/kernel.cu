@@ -1,8 +1,7 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include <helper_cuda.h>
-#include <helper_functions.h>
+
 
 #include <stdio.h>
 
@@ -16,6 +15,25 @@ __global__ void addKernel(int *c, const int *a, const int *b)
     int i = threadIdx.x;
     c[i] = a[i] + b[i];
 }
+
+//rows determined as the amount of rows in a block
+// A is query vector, B is the model ( rows ), C is output matrix
+// Rows should be 300 for proper usage of this access method
+__global__ void DotProduct
+(int rows, float *A, float *B, float *C, float normA, float *normsB) {
+  __shared__ float fastA[300];
+  int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if (id<300) {
+      fastA[id]=A[id];
+  }
+  __syncthreads();
+  float acum=0;
+  for(int i=0;i<300;++i) {
+      acum+=fastA[i]*B[id*300+i];
+  }
+  C[id]=acum/(normA*normsB[id]);
+}
+
 
 extern "C"
 int runCuda()
@@ -42,8 +60,7 @@ int runCuda()
         fprintf(stderr, "cudaDeviceReset failed!");
         return 1;
     }
-	sayHelloWorld();
-
+	
     return 0;
 }
 
