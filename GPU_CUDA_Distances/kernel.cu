@@ -4,9 +4,7 @@
 
 
 #include <stdio.h>
-
-extern "C" void sayHelloWorld();
-
+#include "GlobalHeader.h"
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
@@ -20,14 +18,14 @@ __global__ void addKernel(int *c, const int *a, const int *b)
 // A is query vector, B is the model ( rows ), C is output matrix
 // Rows should be 300 for proper usage of this access method
 __global__ void DotProduct
-(int rows, float *A, float *B, float *C, float normA, float *normsB) {
-  __shared__ float fastA[300];
+(int rows, embed_t *A, embed_t *B, embed_t *C, embed_t normA, embed_t *normsB) {
+  __shared__ embed_t fastA[300];
   int id = blockIdx.x * blockDim.x + threadIdx.x;
   if (id<300) {
       fastA[id]=A[id];
   }
   __syncthreads();
-  float acum=0;
+  embed_t acum=0;
   for(int i=0;i<300;++i) {
       acum+=fastA[i]*B[id*300+i];
   }
