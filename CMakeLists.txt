@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 project(TGA_Project LANGUAGES CXX CUDA)
+set (CMAKE_CXX_STANDARD 11)
 
 set(SRC_DIR "GPU_CUDA_Distances")
 
 set(CU_SRC_FILES ${SRC_DIR}/kernel.cu)
 
 set(CPP_SRC_FILES 
-        ${SRC_DIR}/GlobalHeader.cpp
+        ${SRC_DIR}/GlobalHeader.h
         ${SRC_DIR}/loader.h     ${SRC_DIR}/loader.cpp)
 
 set(CPP_MAIN ${SRC_DIR}/main.cpp)
@@ -15,7 +16,7 @@ set(CPP_MAIN ${SRC_DIR}/main.cpp)
 FIND_PACKAGE(CUDA REQUIRED)
 ADD_DEFINITIONS(-DUSE_CUDA)
 
-SET(SRC_FILES ${COMMON_SRC_FILES} ${CU_SRC_FILES})
+SET(SRC_FILES ${CPP_SRC_FILES} ${CU_SRC_FILES})
 
 #to correctly include the above cuda libraries, a splitting must take place
 foreach(libname ${CUDA_LIBS})
