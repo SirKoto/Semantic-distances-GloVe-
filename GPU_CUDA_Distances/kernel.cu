@@ -4,6 +4,7 @@
 
 
 #include <stdio.h>
+#define CUDA_INCLUDE
 #include "GlobalHeader.h"
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
