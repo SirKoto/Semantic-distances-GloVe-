@@ -40,57 +40,22 @@ __global__ void FirstMerge
 
   
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    int end=length;
-    if (!(id*N>end)) { 
+    int start=id*N;
+    int end=start+N;
+    if (!(start>length)) { 
     
-    for (int cycle_start = id*N; cycle_start < end; cycle_start++) { 
-        // initialize item as starting point 
-        int item = sims[cycle_start]; 
-  
-        // Find position where we put the item. We basically 
-        // count all smaller elements on right side of item. 
-        int pos = cycle_start; 
-        for (int i = cycle_start + 1; i < end; i++) 
-            if (sims[i] > item) 
-                pos++; 
-  
-        // If item is already in correct position 
-        if (pos == cycle_start) 
-            continue; 
-  
-        // ignore all duplicate  elements 
-        while (item == sims[pos]) 
-            pos += 1; 
-  
-        // put the item to it's right position 
-        if (pos != cycle_start) { 
-             float aux=item;
-             item=sims[pos];
-             sims[pos]=aux;
-        } 
-  
-        // Rotate rest of the cycle 
-        while (pos != cycle_start) { 
-            pos = cycle_start; 
-  
-            // Find position where we put the element 
-            for (int i = cycle_start + 1; i < end; i++) 
-                if (sims[i] > item) 
-                    pos += 1; 
-  
-            // ignore all duplicate  elements 
-            while (item == sims[pos]) 
-                pos += 1; 
-  
-            // put the item to it's right position 
-            if (item != sims[pos]) { 
-                float aux=item;
-                item=sims[pos];
-                sims[pos]=aux;
-            } 
-        } 
-    }   
-    }
+    // Insertion sort, as N SHOULD be small
+   int key, j;
+   for(int i = start+1; i<end; i++) {
+      key = sims[i];
+      j = i;
+      while(j > 0 && sims[j-1]<key) {
+         sims[j] = sims[j-1];
+         j--;
+      }
+      sims[j] = key;  
+   }
+}
 }
 
 
@@ -105,53 +70,17 @@ int runCuda()
     
     
     int end=arraySize;
-    for (int cycle_start = 0; cycle_start < end; cycle_start++) { 
-        // initialize item as starting point 
-        int item = sims[cycle_start]; 
-  
-        // Find position where we put the item. We basically 
-        // count all smaller elements on right side of item. 
-        int pos = cycle_start; 
-        for (int i = cycle_start + 1; i < end; i++) 
-            if (sims[i] > item) 
-                pos++; 
-  
-        // If item is already in correct position 
-        if (pos == cycle_start) 
-            continue; 
-  
-        // ignore all duplicate  elements 
-        while (item == sims[pos]) 
-            pos += 1; 
-  
-        // put the item to it's right position 
-        if (pos != cycle_start) { 
-             float aux=item;
-             item=sims[pos];
-             sims[pos]=aux;
-        } 
-  
-        // Rotate rest of the cycle 
-        while (pos != cycle_start) { 
-            pos = cycle_start; 
-  
-            // Find position where we put the element 
-            for (int i = cycle_start + 1; i < end; i++) 
-                if (sims[i] > item) 
-                    pos += 1; 
-  
-            // ignore all duplicate  elements 
-            while (item == sims[pos]) 
-                pos += 1; 
-  
-            // put the item to it's right position 
-            if (item != sims[pos]) { 
-                float aux=item;
-                item=sims[pos];
-                sims[pos]=aux;
-            } 
-        } 
-    }   
+    int start=0;
+   int key, j;
+   for(int i = start+1; i<end; i++) {
+      key = sims[i];
+      j = i;
+      while(j > 0 && sims[j-1]<key) {
+         sims[j] = sims[j-1];
+         j--;
+      }
+      sims[j] = key;  
+   }
     for (int i=0;i<arraySize;++i){
         printf("{%f} ",
         sims[i]);
