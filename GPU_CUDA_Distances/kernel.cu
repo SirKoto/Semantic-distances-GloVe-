@@ -35,14 +35,131 @@ __global__ void DotProduct
 }
 
 
+__global__ void FirstMerge
+(int N, float *sims, int length) {
+
+  
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+    int end=length;
+    if (!(id*N>end)) { 
+    
+    for (int cycle_start = id*N; cycle_start < end; cycle_start++) { 
+        // initialize item as starting point 
+        int item = sims[cycle_start]; 
+  
+        // Find position where we put the item. We basically 
+        // count all smaller elements on right side of item. 
+        int pos = cycle_start; 
+        for (int i = cycle_start + 1; i < end; i++) 
+            if (sims[i] > item) 
+                pos++; 
+  
+        // If item is already in correct position 
+        if (pos == cycle_start) 
+            continue; 
+  
+        // ignore all duplicate  elements 
+        while (item == sims[pos]) 
+            pos += 1; 
+  
+        // put the item to it's right position 
+        if (pos != cycle_start) { 
+             float aux=item;
+             item=sims[pos];
+             sims[pos]=aux;
+        } 
+  
+        // Rotate rest of the cycle 
+        while (pos != cycle_start) { 
+            pos = cycle_start; 
+  
+            // Find position where we put the element 
+            for (int i = cycle_start + 1; i < end; i++) 
+                if (sims[i] > item) 
+                    pos += 1; 
+  
+            // ignore all duplicate  elements 
+            while (item == sims[pos]) 
+                pos += 1; 
+  
+            // put the item to it's right position 
+            if (item != sims[pos]) { 
+                float aux=item;
+                item=sims[pos];
+                sims[pos]=aux;
+            } 
+        } 
+    }   
+    }
+}
+
+
+
 extern "C"
 int runCuda()
 {
-    const int arraySize = 5;
-    const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    int c[arraySize] = { 0 };
+    const int arraySize = 10;
+    //const int a[arraySize] = { 1, 2, 3, 4, 5 };
+    float sims[arraySize] = { 10, 20, 30, 40, 50,1,5,6,38,123};
+    //int c[arraySize] = { 0 };
+    
+    
+    int end=arraySize;
+    for (int cycle_start = 0; cycle_start < end; cycle_start++) { 
+        // initialize item as starting point 
+        int item = sims[cycle_start]; 
+  
+        // Find position where we put the item. We basically 
+        // count all smaller elements on right side of item. 
+        int pos = cycle_start; 
+        for (int i = cycle_start + 1; i < end; i++) 
+            if (sims[i] > item) 
+                pos++; 
+  
+        // If item is already in correct position 
+        if (pos == cycle_start) 
+            continue; 
+  
+        // ignore all duplicate  elements 
+        while (item == sims[pos]) 
+            pos += 1; 
+  
+        // put the item to it's right position 
+        if (pos != cycle_start) { 
+             float aux=item;
+             item=sims[pos];
+             sims[pos]=aux;
+        } 
+  
+        // Rotate rest of the cycle 
+        while (pos != cycle_start) { 
+            pos = cycle_start; 
+  
+            // Find position where we put the element 
+            for (int i = cycle_start + 1; i < end; i++) 
+                if (sims[i] > item) 
+                    pos += 1; 
+  
+            // ignore all duplicate  elements 
+            while (item == sims[pos]) 
+                pos += 1; 
+  
+            // put the item to it's right position 
+            if (item != sims[pos]) { 
+                float aux=item;
+                item=sims[pos];
+                sims[pos]=aux;
+            } 
+        } 
+    }   
+    for (int i=0;i<arraySize;++i){
+        printf("{%f} ",
+        sims[i]);
 
+    }
+    return 0;
+
+/*
     // Add vectors in parallel.
     cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
     if (cudaStatus != cudaSuccess) {
@@ -62,6 +179,7 @@ int runCuda()
     }
 	
     return 0;
+    */
 }
 
 // Helper function for using CUDA to add vectors in parallel.
