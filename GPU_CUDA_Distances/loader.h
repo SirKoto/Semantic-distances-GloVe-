@@ -8,9 +8,16 @@
 class loader
 {
 public:
-	static bool loadData(const std::string &filename, 
-		std::vector<std::string> &words,
-		std::vector<embed_t> &norms,
-		std::vector<embedV_t> &embedings);
-};
+	// Load all necessary data
+	static bool loadData(const std::string& filename,
+		int& numWords,
+		std::vector<std::string>& words,
+		embed_t*& norms,
+		embedV_t*& embedings);
 
+	// Free from memory
+	static void freeData(
+		embed_t* norms,
+		embedV_t* embedings);
+
+};

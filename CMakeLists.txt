@@ -4,7 +4,7 @@ set (CMAKE_CXX_STANDARD 11)
 
 set(SRC_DIR "GPU_CUDA_Distances")
 
-set(CU_SRC_FILES ${SRC_DIR}/kernel.cu)
+set(CU_SRC_FILES ${SRC_DIR}/kernel.cu ${SRC_DIR}/CudaHelp.cu)
 
 set(CPP_SRC_FILES 
         ${SRC_DIR}/GlobalHeader.h
