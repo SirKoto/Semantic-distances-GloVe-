@@ -41,5 +41,5 @@ bool loader::loadData(const std::string& filename, std::vector<std::string>& wor
 
 
 	stream.close();
-	return true;
+	return num;
 }

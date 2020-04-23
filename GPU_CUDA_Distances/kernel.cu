@@ -1,19 +1,14 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-
+#include "GlobalHeader.h"
+#include <vector>
 
 #include <stdio.h>
 #define CUDA_INCLUDE
 #include "GlobalHeader.h"
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
-
-__global__ void addKernel(int *c, const int *a, const int *b)
-{
-    int i = threadIdx.x;
-    c[i] = a[i] + b[i];
-}
 
 //rows determined as the amount of rows in a block
 // A is query vector, B is the model ( rows ), C is output matrix
@@ -57,135 +52,102 @@ __global__ void FirstMerge
 }
 }
 
+int binary_search(std::vector<std::string> words, int length, std::string to_be_found){
+    
+    int p = 0;
+    int r = length - 1;
+    int q = (r + p) / 2;
+    int counter = 0;
+
+    while (p <= r)
+    {
+        counter++;
+        if (words[q] == to_be_found)
+            return q;
+        else
+        {
+            if (words[q] < to_be_found) 
+            {
+                p = q + 1;
+                q = (r + p) / 2;
+            }
+            else
+            {
+                r = q - 1;
+                q = (r + p) / 2;    
+            }
+        }
+    }
+    return -1;
+}
+
 
 
 extern "C"
-int runCuda()
+int runCuda(std::vector<std::string> words,std::vector<embed_t> norms,std::vector<embedV_t> model,int rows,std::string toFind)
 {
-    const int arraySize = 10;
-    //const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    float sims[arraySize] = { 10, 20, 30, 40, 50,1,5,6,38,123};
-    //int c[arraySize] = { 0 };
-    
-    
-    int end=arraySize;
-    int start=0;
-   int key, j;
-   for(int i = start+1; i<end; i++) {
-      key = sims[i];
-      j = i;
-      while(j > 0 && sims[j-1]<key) {
-         sims[j] = sims[j-1];
-         j--;
-      }
-      sims[j] = key;  
-   }
-    for (int i=0;i<arraySize;++i){
-        printf("{%f} ",
-        sims[i]);
 
-    }
-    return 0;
+  embed_t* queryTerm,similarities;
+  embedV_t* A_d,B_d;
+  embed_t* C_d,norms_d;
+  int nBlocks=1;
+  int nThreads=10;
+  float elapsedTime;
 
-/*
-    // Add vectors in parallel.
-    cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addWithCuda failed!");
-        return 1;
-    }
+  embed_t similarities[300];
 
-    printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-        c[0], c[1], c[2], c[3], c[4]);
+  cudaEvent_t start,stop;
 
-    // cudaDeviceReset must be called before exiting in order for profiling and
-    // tracing tools such as Nsight and Visual Profiler to show complete traces.
-    cudaStatus = cudaDeviceReset();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceReset failed!");
-        return 1;
-    }
-	
-    return 0;
-    */
+  int queryTermPos=binary_search(words,rows,toFind);
+  for (int i=0;i<300;++i) {
+      queryTerm[i]=model[queryTermPos*300+i];
+  }
+  
+  embed_t normA=norms[queryTermPos];
+  
+
+  int numBytesQuery=sizeof(embed_t)*300;
+  int numBytesModel=numBytesQuery*rows;
+  int numBytesSimsAndNorms=sizeof(embed_t)*rows;
+
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+
+  cudaMalloc((embed_t**)&A_d, numBytesQuery); 
+  cudaMalloc((embed_t**)&B_d, numBytesModel); 
+  cudaMalloc((embed_t**)&C_d, numBytesSimsAndNorms); 
+  cudaMalloc((embed_t**)&norms_d, numBytesSimsAndNorms); 
+
+  cudaMemcpyAsync(A_d,queryTerm, numBytesQuery, cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(B_d,model, numBytesModel, cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(norms_d,norms, numBytesSimsAndNorms, cudaMemcpyHostToDevice);
+
+  cudaEventRecord(start, 0);
+  
+  DotProduct<<<nBlocks,nThreads >>>(rows,A_d,B_d,C_d,normA,norms_d);
+
+  cudaMemcpyAsync(similarities, C_d, numBytesSimsAndNorms, cudaMemcpyDeviceToHost); 
+  
+  cudaFree(B_d);
+  cudaFree(norms_d);
+  cudaFree(A_d);
+
+  
+  cudaEventRecord(stop, 0);
+  cudaEventSynchronize(stop);
+
+
+  cudaEventElapsedTime(&elapsedTime, start, stop);
+  printf("\nSimilarities\n");
+  printf("Vector Size: %d\n", rows);
+  printf("nThreads: %d\n", nThreads);
+  printf("nBlocks: %d\n", nBlocks);
+  printf("Tiempo Total %4.6f ms\n", elapsedTime);
+  printf("Ancho de Banda %4.3f GB/s\n", (rows *300* sizeof(float)) / (1000000 * elapsedTime));
+  
+  return 0;
+
 }
 
-// Helper function for using CUDA to add vectors in parallel.
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
-{
-    int *dev_a = 0;
-    int *dev_b = 0;
-    int *dev_c = 0;
-    cudaError_t cudaStatus;
 
-    // Choose which GPU to run on, change this on a multi-GPU system.
-    cudaStatus = cudaSetDevice(0);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-        goto Error;
-    }
-
-    // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
-    }
-
-    // Copy input vectors from host memory to GPU buffers.
-    cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-    cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-    // Launch a kernel on the GPU with one thread for each element.
-    addKernel<<<1, size>>>(dev_c, dev_a, dev_b);
-
-    // Check for any errors launching the kernel
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        goto Error;
-    }
-    
-    // cudaDeviceSynchronize waits for the kernel to finish, and returns
-    // any errors encountered during the launch.
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-        goto Error;
-    }
-
-    // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!");
-        goto Error;
-    }
-
-Error:
-    cudaFree(dev_c);
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    
-    return cudaStatus;
-}

@@ -17,9 +17,9 @@ int main(int argc, char* argv[]) {
 
 	std::vector<std::string> words;
 	std::vector<embed_t> norms;
-	std::vector<embedV_t> embedings;
+	std::vector<embedV_t> embeddings;
 
-	bool res = loader::loadData(argv[1], words, norms, embedings);
+	int res = loader::loadData(argv[1], words, norms, embeddings);
 
 	if (res) {
 		std::cout << "Embedings loaded" << std::endl;
@@ -28,5 +28,5 @@ int main(int argc, char* argv[]) {
 		std::cout << "ERROR::EMBEDINGS NOT LOADED!" << std::endl;
 	}
 
-	return runCuda();
+	return runCuda(words, norms, embeddings);
 }
