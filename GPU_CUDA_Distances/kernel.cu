@@ -58,12 +58,14 @@ extern "C"
 int runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos)
 {
 
-	embedV_t queryTerm, similarities;
+	embedV_t queryTerm;
 	embedV_t* A_d, B_d;
 	embed_t* C_d, norms_d;
 	int nBlocks=1;
 	int nThreads=10;
 	float elapsedTime;
+
+    embed_t similarities[numRows];
 
 	cudaEvent_t start,stop;
 
@@ -80,7 +82,7 @@ int runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermP
 	cudaEventCreate(&stop);
 
 
-	/*cudaMalloc((embed_t**)&A_d, numBytesQuery); 
+	cudaMalloc((embed_t**)&A_d, numBytesQuery); 
 	cudaMalloc((embed_t**)&B_d, numBytesModel); 
 	cudaMalloc((embed_t**)&C_d, numBytesSimsAndNorms); 
 	cudaMalloc((embed_t**)&norms_d, numBytesSimsAndNorms); 
@@ -91,7 +93,7 @@ int runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermP
 
 	cudaEventRecord(start, 0);
   
-	DotProduct<<<nBlocks,nThreads >>>(rows, A_d, B_d, C_d, normA, norms_d);
+	DotProduct<<<nBlocks,nThreads >>>(numRows, A_d, B_d, C_d, normA, norms_d);
 
 	cudaMemcpyAsync(similarities, C_d, numBytesSimsAndNorms, cudaMemcpyDeviceToHost); 
   
@@ -102,7 +104,7 @@ int runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermP
   
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
-	*/
+	
 
 	cudaEventElapsedTime(&elapsedTime, start, stop);
 	printf("\nSimilarities\n");
