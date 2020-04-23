@@ -2,8 +2,18 @@
 
 #include <fstream>
 
+extern "C"
+void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
+extern "C"
+void reservePinnedMemoryV(embedV_t * &ptr, int32_t bytes);
+extern "C"
+void freePinnedMemory(void* ptr);
 
-bool loader::loadData(const std::string& filename, std::vector<std::string>& words, std::vector<embed_t>& norms, std::vector<embedV_t>& embedings)
+bool loader::loadData(const std::string& filename,
+	int& numWords,
+	std::vector<std::string>& words,
+	embed_t*& norms,
+	embedV_t*& embedings)
 {
 	std::ifstream stream(filename);
 	if (!stream.is_open())
@@ -12,25 +22,25 @@ bool loader::loadData(const std::string& filename, std::vector<std::string>& wor
 	}
 
 	// count lines 
-	int num = 0;
+	numWords = 0;
 	{
 		std::string buff;
 		while (std::getline(stream, buff)) {
-			num += 1;
+			numWords += 1;
 		}
 	}
 	// reserve
-	words.resize(num);
-	norms.resize(num);
+	words.resize(numWords);
+	reservePinnedMemory(norms, numWords * sizeof(embed_t));
+	reservePinnedMemoryV(embedings,numWords * sizeof(embedV_t));
 
-	embedings.resize(num);
 
 	// back to the begining
 	stream.clear(); // must clear error flags (eof)
 	stream.seekg(0);
 
 	int idx = 0;
-	while (idx < num) {
+	while (idx < numWords) {
 		stream >> words[idx] >> norms[idx]; // load word and precomputed norm
 
 		for (int i = 0; i < numEmbeds; ++i) {
@@ -41,5 +51,13 @@ bool loader::loadData(const std::string& filename, std::vector<std::string>& wor
 
 
 	stream.close();
-	return num;
+	return true;
+}
+
+
+
+void loader::freeData(embed_t* norms, embedV_t* embedings)
+{
+	freePinnedMemory(norms);
+	freePinnedMemory(embedings);
 }

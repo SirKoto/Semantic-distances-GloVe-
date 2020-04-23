@@ -1,8 +1,7 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include <vector>
-
+#include <cstdint>
 #include <stdio.h>
 #include "GlobalHeader.h"
 
