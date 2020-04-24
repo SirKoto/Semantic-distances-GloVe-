@@ -6,7 +6,7 @@
 #include "GlobalHeader.h"
 #include "loader.h"
 
-extern "C" int runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos);
+extern "C" int runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N);
 
 
 int binary_search(std::vector<std::string> words, int length, std::string to_be_found) {
@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
 		std::cout << "ERROR::EMBEDINGS NOT LOADED!" << std::endl;
 	}
 
-	int returnCode = runCuda(norms, embeddings, numElems, 0);
+	int returnCode = runCuda(norms, embeddings, numElems, 30,10);
 
 	// free data
 	loader::freeData(norms, embeddings);

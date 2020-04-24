@@ -7,7 +7,8 @@
 // Reserve pinned memory
 extern "C"
 void reservePinnedMemory(embed_t* &ptr, int32_t bytes) {
-	cudaError_t status = cudaMallocHost((void**)&ptr, bytes);
+
+    cudaError_t status = cudaMallocHost((void**)&ptr, bytes);
 	if (status != cudaSuccess)
 	{
 		fprintf(stderr, "CUDA Runtime Error: %s\n",
@@ -19,6 +20,7 @@ void reservePinnedMemory(embed_t* &ptr, int32_t bytes) {
 
 extern "C"
 void reservePinnedMemoryV(embedV_t * &ptr, int32_t bytes) {
+    
 	cudaError_t status = cudaMallocHost((void**)&ptr, bytes);
 	if (status != cudaSuccess)
 	{

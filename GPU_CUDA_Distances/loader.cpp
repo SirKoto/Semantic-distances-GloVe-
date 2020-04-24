@@ -29,6 +29,7 @@ bool loader::loadData(const std::string& filename,
 			numWords += 1;
 		}
 	}
+
 	// reserve
 	words.resize(numWords);
 	reservePinnedMemory(norms, numWords * sizeof(embed_t));
@@ -38,7 +39,6 @@ bool loader::loadData(const std::string& filename,
 	// back to the begining
 	stream.clear(); // must clear error flags (eof)
 	stream.seekg(0);
-
 	int idx = 0;
 	while (idx < numWords) {
 		stream >> words[idx] >> norms[idx]; // load word and precomputed norm
