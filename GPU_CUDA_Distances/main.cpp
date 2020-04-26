@@ -9,34 +9,7 @@
 extern "C" int runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N);
 
 
-unsigned int binary_search(const std::vector<std::string>& words, const std::string& to_be_found) {
 
-	unsigned int p = 0;
-	unsigned int r = static_cast<unsigned int>(words.size()) - 1;
-	unsigned int q = (r + p) / 2;
-	unsigned int counter = 0;
-
-	while (p <= r)
-	{
-		counter++;
-		if (words[q] == to_be_found)
-			return q;
-		else
-		{
-			if (words[q] < to_be_found)
-			{
-				p = q + 1;
-				q = (r + p) / 2;
-			}
-			else
-			{
-				r = q - 1;
-				q = (r + p) / 2;
-			}
-		}
-	}
-	return -1;
-}
 
 int main(int argc, char* argv[]) {
 
@@ -65,13 +38,13 @@ int main(int argc, char* argv[]) {
 	std::cout << "Enter word to look for similarities" << std::endl;
 	while (returnCode == 0 && std::cin >> word) {
 		// Search word
-		unsigned int idx = binary_search(words, word);
+		unsigned int idx = loader::binary_search(words, word);
 		if (idx == -1) {
 			std::cout << "Could not find word!!!!" << std::endl;
 			continue;
 		}
 		
-		std::cout << "Found word " << word << " in position " << idx << std::endl;
+		std::cout << "Found word \"" << word << "\" in position " << idx << std::endl;
 
 		returnCode  = runCuda(norms, embeddings, numElems, idx, 5);
 		std::cout << "Enter word to look for similarities" << std::endl;
