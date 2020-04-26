@@ -57,9 +57,17 @@ int main(int argc, char* argv[]) {
 	}
 	else {
 		std::cout << "ERROR::EMBEDINGS NOT LOADED!" << std::endl;
+		return 1;
 	}
 
-	int returnCode = runCuda(norms, embeddings, numElems, 30,10);
+	std::string word;
+	int returnCode = 0;
+	std::cout << "Enter word to look for similarities" << std::endl;
+	while (returnCode == 0 && std::cin >> word) {
+		returnCode  = runCuda(norms, embeddings, numElems, 30, 10);
+		std::cout << "Enter word to look for similarities" << std::endl;
+	}
+
 
 	// free data
 	loader::freeData(norms, embeddings);

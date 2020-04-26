@@ -70,6 +70,12 @@ bool loader::loadData(const std::string& filename,
 
 void loader::freeData(embed_t* norms, embedV_t* embedings)
 {
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
 	freePinnedMemory(norms);
 	freePinnedMemory(embedings);
+	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+	std::cout << "Unloaded data = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " us " << std::endl;
+
+
 }
