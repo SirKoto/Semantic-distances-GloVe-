@@ -1,4 +1,7 @@
-#pragma once
+#ifndef GLOBAL_HEADER_H
+#define GLOBAL_HEADER_H
+
+
 // embeding type
 typedef float embed_t;
 #define numEmbeds 300
@@ -11,3 +14,11 @@ struct embedV_t {
 		return data[i];
 	}
 };
+
+
+struct embed_p {
+	unsigned int id; // unsigned int fits the entire number of words to load
+	embed_t data;
+};
+
+#endif // !GLOBAL_HEADER_H

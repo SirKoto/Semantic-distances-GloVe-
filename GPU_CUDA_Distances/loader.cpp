@@ -1,6 +1,8 @@
 #include "loader.h"
 
 #include <fstream>
+#include <chrono>
+#include <iostream>
 
 extern "C"
 void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
@@ -21,6 +23,7 @@ bool loader::loadData(const std::string& filename,
 		return false;
 	}
 
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 	// count lines 
 	numWords = 0;
 	{
@@ -29,6 +32,8 @@ bool loader::loadData(const std::string& filename,
 			numWords += 1;
 		}
 	}
+
+	std::chrono::steady_clock::time_point linesCounted = std::chrono::steady_clock::now();
 
 	// reserve
 	words.resize(numWords);
@@ -49,8 +54,15 @@ bool loader::loadData(const std::string& filename,
 		idx += 1;
 	}
 
+	std::chrono::steady_clock::time_point dataLoaded = std::chrono::steady_clock::now();
 
 	stream.close();
+
+	std::cout << "Count lines = " << std::chrono::duration_cast<std::chrono::microseconds>(linesCounted - begin).count() << " us " << std::endl;
+	std::cout << "Load data = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - linesCounted).count() << " us " << std::endl;
+	std::cout << "Total loading time = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - begin).count() << " us " << std::endl;
+
+
 	return true;
 }
 
@@ -58,6 +70,49 @@ bool loader::loadData(const std::string& filename,
 
 void loader::freeData(embed_t* norms, embedV_t* embedings)
 {
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
 	freePinnedMemory(norms);
 	freePinnedMemory(embedings);
+	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+	std::cout << "Unloaded data = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " us " << std::endl;
+
+
+}
+
+unsigned int loader::binary_search(const std::vector<std::string>& words, const std::string& to_be_found) {
+
+	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
+	unsigned int p = 0;
+	unsigned int r = static_cast<unsigned int>(words.size()) - 1;
+	unsigned int q = (r + p) / 2;
+	unsigned int counter = 0;
+
+	while (p <= r)
+	{
+		counter++;
+		if (words[q] == to_be_found) {
+			break;
+		} else {
+			if (words[q] < to_be_found) {
+				p = q + 1;
+				q = (r + p) / 2;
+			}
+			else {
+				r = q - 1;
+				q = (r + p) / 2;
+			}
+		}
+	}
+	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+	std::cout << "Binary Search = " << counter << " iterations, " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " us " << std::endl;
+
+	if (p > r) {
+		return -1;
+	}
+	else {
+		return q;
+	}
+
 }

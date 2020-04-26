@@ -20,4 +20,6 @@ public:
 		embed_t* norms,
 		embedV_t* embedings);
 
+	static unsigned int binary_search(const std::vector<std::string>& words, const std::string& to_be_found);
+
 };
