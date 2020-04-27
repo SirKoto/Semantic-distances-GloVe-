@@ -46,12 +46,13 @@ int main(int argc, char* argv[]) {
 		
 		std::cout << "Found word \"" << word << "\" in position " << idx << std::endl;
         std::vector<unsigned int> results;
-		results  = runCuda(norms, embeddings, numElems, idx, 5, returnCode);
+		results  = runCuda(norms, embeddings, numElems, idx,11, returnCode);
         
        	std::cout << "Most similar N words:" << std::endl;
-        for (int i=0;i<5;++i)
+        for (int i=0;i<11;++i){
+            if (results[i]!=idx)
         std::cout << words[results[i]] << std::endl;
-        
+        }
 		std::cout << "Enter word to look for similarities" << std::endl;
 	}
 

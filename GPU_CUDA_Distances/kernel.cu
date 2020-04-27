@@ -70,29 +70,38 @@ __global__ void FirstMerge
 }
 
 __global__ void BotchedMergeSort
-(int N, embed_t *sims,unsigned int* pos,unsigned long stride) {
+(int N, embed_t *sims,unsigned int* pos,embed_t *simsAux,unsigned int* posAux,unsigned long stride) {
 
   
     unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
     id=id*N;
-    int currentPos=0, posB=0;
+    int posA=0,posB=0;
     if (id<stride) { 
-        embed_t elem=sims[(id+stride)];
-        unsigned int posAux=pos[(id+stride)];
+        embed_t elemA=sims[(id+stride)];
+        unsigned int posAuxA=pos[(id+stride)];
+        embed_t elemB=sims[id];
+        unsigned int posAuxB=pos[id];
+
         sims[(id+stride)]=0;
-        pos[(id+stride)]=0;
-        while(currentPos<N) {
-            if (sims[(id+currentPos)]<elem) {
-                sims[(id+currentPos)]=elem;
-                pos[(id+currentPos)]=posAux;
+        for(int i=0;i<N;++i) {
+            if (elemA>elemB) {
+                ++posA;
+                simsAux[id+i]=elemA;
+                posAux[id+i]=posAuxA;
+                
+                elemA=sims[(id+posA+stride)];
+                posAuxA=pos[(id+posA+stride)];
+                sims[(id+posA+stride)]=0;
+            }
+            else {
                 ++posB;
-                elem=sims[(id+posB+stride)];
-                posAux=pos[(id+posB+stride)];
-                sims[(id+posB+stride)]=0;
-                pos[(id+posB+stride)]=0;
+                simsAux[id+i]=elemB;
+                posAux[id+i]=posAuxB;
+                
+                elemB=sims[id+posB];
+                posAuxB=pos[id+posB];
 
             }
-            ++currentPos;
         }
    
 }
@@ -110,22 +119,20 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	embedV_t queryTerm;
 	embed_t* A_d;
 	embed_t* norms_d;
-    embed_t* C_d;
+    embed_t *C_d,*CAux_d;
     embedV_t* B_d;
-    unsigned int *positions,*pos_d;
+    unsigned int *positions,*pos_d,*posAux_d;
 	int nBlocks=(numRows/512)+1;
 	int nThreads=512;
 	float elapsedTime;
     
     unsigned int numRowsMod=numRows;
-    if (!numRows%N) {
-        numRowsMod=(N-numRows%N)+numRows;
-        numRowsMod+=numRowsMod%2*N;
-      }
+    if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
+    numRowsMod+=numRowsMod%2*N;
 
 
 	embed_t* similarities;
-	reservePinnedMemory(similarities, sizeof(embed_t) * numRowsMod);
+	cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod);
     cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod);
 
 
@@ -150,6 +157,11 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	cudaMalloc((unsigned int**)&pos_d, numBytesSims); 
 	cudaMalloc((embed_t**)&norms_d, numBytesNorms); 
 
+
+	cudaMalloc((embed_t**)&CAux_d, numBytesSims); 
+	cudaMalloc((unsigned int**)&posAux_d, numBytesSims); 
+
+
 	cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice);
 	cudaMemcpyAsync(B_d, model, numBytesModel, cudaMemcpyHostToDevice);
 	cudaMemcpyAsync(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice);
@@ -162,18 +174,28 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     FirstMerge<<<nBlocks, nThreads >>>(N,C_d,pos_d,numRows,numRowsMod);
   
     unsigned long toReduce=((numRowsMod/N)/2);
+    bool alternate=true;
     while(toReduce>0) {
         nBlocks=((toReduce*N)/nThreads)+1;
         printf("%lu\n",toReduce*N);
-        BotchedMergeSort<<<nBlocks, nThreads >>>(N, C_d, pos_d,toReduce*N);
-        if (toReduce>1) toReduce=toReduce/2+toReduce%2;
-        else toReduce=toReduce/2;
+        if (alternate) BotchedMergeSort<<<nBlocks, nThreads >>>(N, C_d, pos_d,CAux_d,posAux_d,toReduce*N);
+        else BotchedMergeSort<<<nBlocks, nThreads >>>(N, CAux_d,posAux_d,C_d, pos_d,toReduce*N);
+        if (toReduce>1){
+            toReduce+=toReduce%2;
+            }
+        toReduce=toReduce/2;
+        alternate=!alternate;
     }
     
-    
-    
-	cudaMemcpyAsync(similarities, C_d, numBytesSims, cudaMemcpyDeviceToHost); 
-  	cudaMemcpyAsync(positions, pos_d, numBytesSims, cudaMemcpyDeviceToHost); 
+    if (alternate){
+	cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
+  	cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
+    }
+    else {
+    cudaMemcpyAsync(similarities, CAux_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
+  	cudaMemcpyAsync(positions, posAux_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
+
+    }
 
   cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
@@ -183,15 +205,17 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	cudaFree(B_d);
 	cudaFree(norms_d);
 	cudaFree(A_d);
-	//cudaFreeHost(similarities);
+	cudaFree(CAux_d);
+	cudaFree(C_d);
+	cudaFree(pos_d);
+	cudaFree(posAux_d);
 
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	
     printf("\nSimilarity vector\n");
     
-    for(int i=0;i<numRowsMod;++i) {
-        if (i%N==0 && i!=0)printf("\n");
+    for(int i=0;i<N;++i) {
     printf("[ %f , %i ]",similarities[i],positions[i]);
 
     }
@@ -211,6 +235,8 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     results.push_back(positions[i]);
     }
 
+	cudaFreeHost(similarities);
+	cudaFreeHost(positions);
 
 
 	return results;
