@@ -6,7 +6,7 @@
 #include <assert.h>
 // Reserve pinned memory
 extern "C"
-void reservePinnedMemory(embed_t* &ptr, int32_t bytes) {
+void reservePinnedMemory(embed_t* &ptr, size_t bytes) {
 
     cudaError_t status = cudaMallocHost((void**)&ptr, bytes);
 	if (status != cudaSuccess)
@@ -19,7 +19,7 @@ void reservePinnedMemory(embed_t* &ptr, int32_t bytes) {
 }
 
 extern "C"
-void reservePinnedMemoryV(embedV_t * &ptr, int32_t bytes) {
+void reservePinnedMemoryV(embedV_t * &ptr, size_t bytes) {
     
 	cudaError_t status = cudaMallocHost((void**)&ptr, bytes);
 	if (status != cudaSuccess)

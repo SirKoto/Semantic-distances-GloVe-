@@ -10,7 +10,7 @@ class loader
 public:
 	// Load all necessary data
 	static bool loadData(const std::string& filename,
-		int& numWords,
+		size_t& numWords,
 		std::vector<std::string>& words,
 		embed_t*& norms,
 		embedV_t*& embedings);

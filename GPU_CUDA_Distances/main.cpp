@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 	std::vector<std::string> words;
 	embed_t* norms;
 	embedV_t* embeddings;
-	int numElems;
+	size_t numElems;
 
 	int res = loader::loadData(argv[1], numElems, words, norms, embeddings);
 

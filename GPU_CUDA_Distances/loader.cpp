@@ -5,14 +5,14 @@
 #include <iostream>
 
 extern "C"
-void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
+void reservePinnedMemory(embed_t * &ptr, size_t bytes);
 extern "C"
-void reservePinnedMemoryV(embedV_t * &ptr, int32_t bytes);
+void reservePinnedMemoryV(embedV_t * &ptr, size_t bytes);
 extern "C"
 void freePinnedMemory(void* ptr);
 
 bool loader::loadData(const std::string& filename,
-	int& numWords,
+	size_t& numWords,
 	std::vector<std::string>& words,
 	embed_t*& norms,
 	embedV_t*& embedings)
@@ -44,7 +44,7 @@ bool loader::loadData(const std::string& filename,
 	// back to the begining
 	stream.clear(); // must clear error flags (eof)
 	stream.seekg(0);
-	int idx = 0;
+	size_t idx = 0;
 	while (idx < numWords) {
 		stream >> words[idx] >> norms[idx]; // load word and precomputed norm
 
