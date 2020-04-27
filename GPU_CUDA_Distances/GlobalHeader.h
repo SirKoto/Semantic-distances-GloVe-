@@ -17,8 +17,8 @@ struct embedV_t {
 
 
 struct embed_p {
+    embed_t data;
 	unsigned int id; // unsigned int fits the entire number of words to load
-	embed_t data;
 };
 
 #endif // !GLOBAL_HEADER_H

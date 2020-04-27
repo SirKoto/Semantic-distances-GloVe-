@@ -6,7 +6,7 @@
 #include "GlobalHeader.h"
 #include "loader.h"
 
-extern "C" int runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N);
+extern "C" std::vector<unsigned int> runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode);
 
 
 
@@ -45,8 +45,13 @@ int main(int argc, char* argv[]) {
 		}
 		
 		std::cout << "Found word \"" << word << "\" in position " << idx << std::endl;
-
-		returnCode  = runCuda(norms, embeddings, numElems, idx, 5);
+        std::vector<unsigned int> results;
+		results  = runCuda(norms, embeddings, numElems, idx, 5, returnCode);
+        
+       	std::cout << "Most similar N words:" << std::endl;
+        for (int i=0;i<5;++i)
+        std::cout << words[results[i]] << std::endl;
+        
 		std::cout << "Enter word to look for similarities" << std::endl;
 	}
 
