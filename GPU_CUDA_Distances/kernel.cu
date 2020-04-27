@@ -84,7 +84,13 @@ __global__ void BotchedMergeSort
 
         sims[(id+stride)]=0;
         for(int i=0;i<N;++i) {
-            if (elemA>elemB) {
+            if (posAuxA==posAuxB) {
+                ++posA;
+                elemA=sims[(id+posA+stride)];
+                posAuxA=pos[(id+posA+stride)];
+                sims[(id+posA+stride)]=0;
+            }
+            if (elemA>elemB && posA<N) {
                 ++posA;
                 simsAux[id+i]=elemA;
                 posAux[id+i]=posAuxA;
