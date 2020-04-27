@@ -16,8 +16,8 @@ __global__ void DotProduct
   __shared__ embed_t fastA[numEmbeds];
   
   unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
-  if (id<numEmbeds) {
-      fastA[id]= A[id]; // only one embeding is on A
+  if (threadIdx.x<numEmbeds) {
+      fastA[threadIdx.x]= A[threadIdx.x]; // only one embeding is on A
   }
   __syncthreads();
   if (id<rows) {
@@ -122,7 +122,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     embed_t *C_d,*CAux_d;
     embedV_t* B_d;
     unsigned int *positions,*pos_d,*posAux_d;
-	int nBlocks=(numRows/512)+1;
+	unsigned int nBlocks=(numRows/512)+1;
 	int nThreads=512;
 	float elapsedTime;
     
@@ -130,7 +130,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
     numRowsMod+=numRowsMod%2*N;
 
-
+    printf("%u\n",numRows);
 	embed_t* similarities;
 	cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod);
     cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod);
@@ -177,7 +177,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     bool alternate=true;
     while(toReduce>0) {
         nBlocks=((toReduce*N)/nThreads)+1;
-        printf("%lu\n",toReduce*N);
+        //printf("%lu\n",toReduce*N);
         if (alternate) BotchedMergeSort<<<nBlocks, nThreads >>>(N, C_d, pos_d,CAux_d,posAux_d,toReduce*N);
         else BotchedMergeSort<<<nBlocks, nThreads >>>(N, CAux_d,posAux_d,C_d, pos_d,toReduce*N);
         if (toReduce>1){
@@ -215,7 +215,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	
     printf("\nSimilarity vector\n");
     
-    for(int i=0;i<N;++i) {
+   for(int i=0;i<N;++i) {
     printf("[ %f , %i ]",similarities[i],positions[i]);
 
     }
