@@ -136,7 +136,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
     numRowsMod+=numRowsMod%2*N;
 
-    printf("%u\n",numRows);
+    //printf("%u\n",numRows);
 	embed_t* similarities;
 	cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod);
     cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod);
@@ -219,12 +219,12 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	
-    printf("\nSimilarity vector\n");
+    //printf("\nSimilarity vector\n");
     
-   for(int i=0;i<N;++i) {
+   /*for(int i=0;i<N;++i) {
     printf("[ %f , %i ]",similarities[i],positions[i]);
 
-    }
+    }*/
     
     
 
@@ -232,9 +232,9 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	printf("\nSimilarities\n");
 	printf("Vector Size: %d\n", numRows);
 	printf("nThreads: %d\n", nThreads);
-	printf("nBlocks: %d\n", nBlocks);
+	printf("nBlocks: %d\n", (numRows/nThreads)+1);
 	printf("Tiempo Total %4.6f ms\n", elapsedTime);
-	printf("Ancho de Banda %4.3f GB/s\n", (numRows *300* sizeof(float)) / (1000000 * elapsedTime));
+	printf("Ancho de Banda %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
   
     std::vector<unsigned int> results;
     for (int i=0;i<N;++i) {
