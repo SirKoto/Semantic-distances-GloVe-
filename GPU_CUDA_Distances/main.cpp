@@ -74,9 +74,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::string word;
+	bool runCPU;
 	int returnCode = 0;
-	std::cout << "Enter word to look for similarities" << std::endl;
-	while (returnCode == 0 && std::cin >> word) {
+	std::vector<unsigned int> results;
+
+	std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
+	while (returnCode == 0 && std::cin >> word >> runCPU) {
 		// Search word
 		unsigned int idx = loader::binary_search(words, word);
 		if (idx == -1) {
@@ -85,19 +88,19 @@ int main(int argc, char* argv[]) {
 		}
 		
 		std::cout << "Found word \"" << word << "\" in position " << idx << std::endl;
-        std::vector<unsigned int> results;
-        auto start = std::chrono::steady_clock::now();
-        results  = sequentialSearch(norms, embeddings, numElems, idx,11);
-        auto stop = std::chrono::steady_clock::now();
-       	std::cout << "Most similar N words with CPU:" << std::endl;
-        for (int i=0;i<11;++i){
-            if (results[i]!=idx)
-        std::cout << words[results[i]] << std::endl;
-        } 
-        
-std::cout << "CPU execution took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()
-    << " milliseconds\n";   
-        
+		if (runCPU) {
+			auto start = std::chrono::steady_clock::now();
+			results = sequentialSearch(norms, embeddings, numElems, idx, 11);
+			auto stop = std::chrono::steady_clock::now();
+			std::cout << "Most similar N words with CPU:" << std::endl;
+			for (int i = 0; i < 11; ++i) {
+				if (results[i] != idx)
+					std::cout << words[results[i]] << std::endl;
+			}
+
+			std::cout << "CPU execution took: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()
+				<< " milliseconds\n";
+		}
         auto startGPU = std::chrono::steady_clock::now();
         results  = runCuda(norms, embeddings, numElems, idx,11, returnCode);
         auto stopGPU = std::chrono::steady_clock::now();
@@ -107,12 +110,11 @@ std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::mi
        	std::cout << "Most similar N words:" << std::endl;
         for (int i=0;i<11;++i){
             if (results[i]!=idx)
-        std::cout << words[results[i]] << std::endl;
+				std::cout << words[results[i]] << std::endl;
         }
         
-        
-
-		std::cout << "Enter word to look for similarities" << std::endl;
+       
+		std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
 	}
 
 
