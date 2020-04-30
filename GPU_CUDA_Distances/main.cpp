@@ -10,6 +10,11 @@
 
 extern "C" std::vector<unsigned int> runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode);
 
+extern "C"
+void loadModel(embed_t * norms, embedV_t * model, int32_t numRows);
+
+extern "C"
+void freeAll();
 
 bool customCompare (embed_p i,embed_p j) { return (i.data>=j.data); }
 std::vector<unsigned int> sequentialSearch(embed_t* norms,embedV_t* embeddings,unsigned int numElems,unsigned int idx,unsigned int N ) {
@@ -73,6 +78,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	// load model
+	loadModel(norms, embeddings, numElems);
+
 	std::string word;
 	bool runCPU;
 	int returnCode = 0;
@@ -117,7 +125,7 @@ std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::mi
 		std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
 	}
 
-
+	freeAll();
 	// free data
 	loader::freeData(norms, embeddings);
 

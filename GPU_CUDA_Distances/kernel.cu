@@ -117,16 +117,38 @@ __global__ void BotchedMergeSort
 extern "C"
 void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
 
+// Global variable
+embedV_t* B_d;
+embed_t* norms_d;
+
+
+extern "C"
+void loadModel(embed_t * norms, embedV_t * model, int32_t numRows)
+{
+	unsigned int numBytesModel = sizeof(embedV_t) * numRows;
+	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
+
+	cudaMalloc((embed_t**)&B_d, numBytesModel);
+	cudaMalloc((embed_t**)&norms_d, numBytesNorms);
+
+	cudaMemcpy(B_d, model, numBytesModel, cudaMemcpyHostToDevice);
+	cudaMemcpy(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice);
+}
+
+extern "C"
+void freeAll()
+{
+	cudaFree(norms_d);
+	cudaFree(B_d);
+}
+
 
 extern "C"
 std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode)
 {
-
 	embedV_t queryTerm;
 	embed_t* A_d;
-	embed_t* norms_d;
     embed_t *C_d,*CAux_d;
-    embedV_t* B_d;
     unsigned int *positions,*pos_d,*posAux_d;
 	unsigned int nBlocks=(numRows/512)+1;
 	int nThreads=512;
@@ -150,18 +172,14 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 
 
 	unsigned int numBytesQuery = sizeof(embedV_t);
-	unsigned int numBytesModel = sizeof(embedV_t) * numRows;
-	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
 	unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
 
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
     
 	cudaMalloc((embed_t**)&A_d, numBytesQuery); 
-	cudaMalloc((embed_t**)&B_d, numBytesModel); 
 	cudaMalloc((embed_t**)&C_d, numBytesSims); 
 	cudaMalloc((unsigned int**)&pos_d, numBytesSims); 
-	cudaMalloc((embed_t**)&norms_d, numBytesNorms); 
 
 
 	cudaMalloc((embed_t**)&CAux_d, numBytesSims); 
@@ -169,8 +187,6 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 
 
 	cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice);
-	cudaMemcpyAsync(B_d, model, numBytesModel, cudaMemcpyHostToDevice);
-	cudaMemcpyAsync(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice);
 
 	cudaEventRecord(start, 0);
 
@@ -208,8 +224,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
       fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
       returnCode=1;
     }
-	cudaFree(B_d);
-	cudaFree(norms_d);
+
 	cudaFree(A_d);
 	cudaFree(CAux_d);
 	cudaFree(C_d);
