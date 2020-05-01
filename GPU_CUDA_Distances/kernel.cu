@@ -146,6 +146,12 @@ void freeAll()
 extern "C"
 std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode)
 {
+	if (!B_d || !norms_d) {
+		fprintf(stderr, "Memory not initialized\n");
+		returnCode = 1;
+		return {};
+	}
+
 	embedV_t queryTerm;
 	embed_t* A_d;
     embed_t *C_d,*CAux_d;
