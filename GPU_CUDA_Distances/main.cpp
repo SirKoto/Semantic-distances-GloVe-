@@ -8,13 +8,14 @@
 #include "loader.h"
 #include <chrono> 
 
-extern "C" std::vector<unsigned int> runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode);
+extern "C"
+std::vector<unsigned int> runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos, int32_t N, embedV_t * B_d, embed_t * norms_d, int& returnCode);
 
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, int32_t numRows);
+void loadModel(embed_t * norms, embedV_t * model, int32_t numRows, embedV_t * &B_d, embed_t * &norms_d);
 
 extern "C"
-void freeAll();
+void freeAll(embedV_t * &B_d, embed_t * &norms_d);
 
 bool customCompare (embed_p i,embed_p j) { return (i.data>=j.data); }
 std::vector<unsigned int> sequentialSearch(embed_t* norms,embedV_t* embeddings,unsigned int numElems,unsigned int idx,unsigned int N ) {
@@ -78,8 +79,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+	embedV_t* model_d; embed_t* norms_d;
 	// load model
-	loadModel(norms, embeddings, numElems);
+	loadModel(norms, embeddings, numElems, model_d, norms_d);
 
 	std::string word;
 	bool runCPU;
@@ -110,7 +112,7 @@ int main(int argc, char* argv[]) {
 				<< " milliseconds\n";
 		}
         auto startGPU = std::chrono::steady_clock::now();
-        results  = runCuda(norms, embeddings, numElems, idx,11, returnCode);
+        results  = runCuda(norms, embeddings, numElems, idx,11, model_d, norms_d, returnCode);
         auto stopGPU = std::chrono::steady_clock::now();
 std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stopGPU - startGPU).count()
     << " milliseconds\n";   
@@ -125,7 +127,7 @@ std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::mi
 		std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
 	}
 
-	freeAll();
+	freeAll(model_d, norms_d);
 	// free data
 	loader::freeData(norms, embeddings);
 

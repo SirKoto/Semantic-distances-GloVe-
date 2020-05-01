@@ -117,13 +117,9 @@ __global__ void BotchedMergeSort
 extern "C"
 void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
 
-// Global variable
-embedV_t* B_d;
-embed_t* norms_d;
-
 
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, int32_t numRows)
+void loadModel(embed_t * norms, embedV_t * model, int32_t numRows, embedV_t* &B_d, embed_t* & norms_d)
 {
 	unsigned int numBytesModel = sizeof(embedV_t) * numRows;
 	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
@@ -136,7 +132,7 @@ void loadModel(embed_t * norms, embedV_t * model, int32_t numRows)
 }
 
 extern "C"
-void freeAll()
+void freeAll(embedV_t * &B_d, embed_t * &norms_d)
 {
 	cudaFree(norms_d);
 	cudaFree(B_d);
@@ -144,7 +140,7 @@ void freeAll()
 
 
 extern "C"
-std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos,int32_t N, int &returnCode)
+std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos,int32_t N, embedV_t * B_d, embed_t * norms_d, int &returnCode)
 {
 	if (!B_d || !norms_d) {
 		fprintf(stderr, "Memory not initialized\n");
