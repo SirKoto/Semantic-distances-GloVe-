@@ -32,8 +32,11 @@ bool loader::loadData(const std::string& filename,
 			numWords += 1;
 		}
 	}
-
 	std::chrono::steady_clock::time_point linesCounted = std::chrono::steady_clock::now();
+
+	std::cout << "Lines counted: " << numWords << std::endl;
+	std::cout << "Count lines = " << std::chrono::duration_cast<std::chrono::microseconds>(linesCounted - begin).count() << " us " << std::endl;
+
 
 	// reserve
 	words.resize(numWords);
@@ -58,7 +61,6 @@ bool loader::loadData(const std::string& filename,
 
 	stream.close();
 
-	std::cout << "Count lines = " << std::chrono::duration_cast<std::chrono::microseconds>(linesCounted - begin).count() << " us " << std::endl;
 	std::cout << "Load data = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - linesCounted).count() << " us " << std::endl;
 	std::cout << "Total loading time = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - begin).count() << " us " << std::endl;
 

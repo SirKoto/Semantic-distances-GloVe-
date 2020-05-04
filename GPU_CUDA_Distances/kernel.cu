@@ -33,22 +33,22 @@ __global__ void DotProduct
 
 
 __global__ void FirstMerge
-(int N, embed_t *sims,unsigned int* pos, int length, int pad) {
+(int N, embed_t *sims, unsigned int* pos, unsigned int length, unsigned int pad) {
 
   
-    int id = blockIdx.x * blockDim.x + threadIdx.x;
-    int start=id*N;
-    int end=start+N;
+	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int start=id*N;
+	unsigned int end=start+N;
     if (start<length) { 
     
     // Insertion sort, as N SHOULD be small
     
-	for(int i=start+1; i<end; i++)
+	for(unsigned int i=start+1; i<end; i++)
 	{
     if (i<length){
 		embed_t temp=sims[i];
         unsigned int position=pos[i];
-		int j=i-1;
+		unsigned int j=i-1;
 		while((temp>sims[j]) && (j>=start))
 		{
 			sims[j+1]=sims[j];
@@ -59,7 +59,7 @@ __global__ void FirstMerge
         pos[(j+1)]=position;
 	}
     else if (i<pad) {
-        for (int i=0;i<N;++i) {
+        for (unsigned int i=0;i<N;++i) {
     	sims[id+i]=0;
         pos[id+i]=0;
         }
@@ -74,7 +74,7 @@ __global__ void BotchedMergeSort
   
     unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
     id=id*N;
-    int posA=0,posB=0;
+	unsigned int posA=0,posB=0;
     if (id<stride) { 
         embed_t elemA=sims[(id+stride)];
         unsigned int posAuxA=pos[(id+stride)];
@@ -82,7 +82,7 @@ __global__ void BotchedMergeSort
         unsigned int posAuxB=pos[id];
 
         sims[(id+stride)]=0;
-        for(int i=0;i<N;++i) {
+        for(unsigned int i=0;i<N;++i) {
             if (posAuxA==posAuxB) {
                 ++posA;
                 elemA=sims[(id+posA+stride)];
@@ -120,8 +120,8 @@ void reservePinnedMemory(embed_t * &ptr, size_t bytes);
 extern "C"
 void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, embedV_t* &B_d, embed_t* & norms_d)
 {
-	unsigned int numBytesModel = sizeof(embedV_t) * numRows;
-	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
+	size_t numBytesModel = sizeof(embedV_t) * numRows;
+	size_t numBytesNorms = sizeof(embed_t) * numRows;
 
 	cudaMalloc((embed_t**)&B_d, numBytesModel);
 	cudaMalloc((embed_t**)&norms_d, numBytesNorms);
