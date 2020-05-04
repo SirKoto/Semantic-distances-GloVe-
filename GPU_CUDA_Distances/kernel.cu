@@ -6,7 +6,6 @@
 #include <vector>
 #include "GlobalHeader.h"
 
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
 //rows determined as the amount of rows in a block
 // A is query vector, B is the model ( rows ), C is output matrix
@@ -163,8 +162,8 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 
     //printf("%u\n",numRows);
 	embed_t* similarities;
-	cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod);
-    cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod);
+	cudaMallocHost((void**)&similarities, sizeof(embed_t) * N);
+    cudaMallocHost((void**)&positions, sizeof(embed_t) * N);
 
 
 	cudaEvent_t start, stop;
@@ -212,14 +211,13 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
         alternate=!alternate;
     }
     
-    if (alternate){
+    if (alternate) {
 	cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
   	cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
     }
     else {
     cudaMemcpyAsync(similarities, CAux_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
   	cudaMemcpyAsync(positions, posAux_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
-
     }
 
   cudaError_t error = cudaGetLastError();
