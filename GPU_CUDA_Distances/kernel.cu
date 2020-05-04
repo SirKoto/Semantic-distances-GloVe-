@@ -115,11 +115,11 @@ __global__ void BotchedMergeSort
 
 
 extern "C"
-void reservePinnedMemory(embed_t * &ptr, int32_t bytes);
+void reservePinnedMemory(embed_t * &ptr, size_t bytes);
 
 
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, int32_t numRows, embedV_t* &B_d, embed_t* & norms_d)
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, embedV_t* &B_d, embed_t* & norms_d)
 {
 	unsigned int numBytesModel = sizeof(embedV_t) * numRows;
 	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
@@ -140,12 +140,13 @@ void freeAll(embedV_t * &B_d, embed_t * &norms_d)
 
 
 extern "C"
-std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRows, int32_t queryTermPos,int32_t N, embedV_t * B_d, embed_t * norms_d, int &returnCode)
+void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, embedV_t * B_d, embed_t * norms_d, int &returnCode, std::vector<unsigned int> &res)
 {
 	if (!B_d || !norms_d) {
 		fprintf(stderr, "Memory not initialized\n");
 		returnCode = 1;
-		return {};
+		res = {};
+		return;
 	}
 
 	embedV_t queryTerm;
@@ -254,16 +255,14 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	printf("Ancho de Banda %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
   
     std::vector<unsigned int> results;
-    for (int i=0;i<N;++i) {
-    results.push_back(positions[i]);
+    for (unsigned int i=0;i<N;++i) {
+		results.push_back(positions[i]);
     }
 
 	cudaFreeHost(similarities);
 	cudaFreeHost(positions);
 
-
-	return results;
-
+	res = results;
 }
 
 

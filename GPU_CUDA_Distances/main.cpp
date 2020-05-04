@@ -9,10 +9,10 @@
 #include <chrono> 
 
 extern "C"
-std::vector<unsigned int> runCuda(embed_t * norms, embedV_t * model, int32_t numRows, int32_t queryTermPos, int32_t N, embedV_t * B_d, embed_t * norms_d, int& returnCode);
+void runCuda(embed_t * norms, embedV_t * model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, embedV_t * B_d, embed_t * norms_d, int& returnCode, std::vector<unsigned int> & res);
 
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, int32_t numRows, embedV_t * &B_d, embed_t * &norms_d);
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, embedV_t * &B_d, embed_t * &norms_d);
 
 extern "C"
 void freeAll(embedV_t * &B_d, embed_t * &norms_d);
@@ -41,7 +41,7 @@ std::vector<unsigned int> sequentialSearch(embed_t* norms,embedV_t* embeddings,u
   std::sort (orderedResults.begin(), orderedResults.end(), customCompare);  
   for (unsigned int i=N;i<numElems;++i) {
       embed_p elem=similarities[i];
-      for (int j=0;j<N;++j) {
+      for (unsigned int j=0;j<N;++j) {
           if (orderedResults[j].data<elem.data) {
               orderedResults[N]=elem;
               std::sort (orderedResults.begin(), orderedResults.end(), customCompare);  
@@ -50,7 +50,7 @@ std::vector<unsigned int> sequentialSearch(embed_t* norms,embedV_t* embeddings,u
       }
   }
   std::vector<unsigned int> result;
-  for (int i=0;i<N;++i) {
+  for (unsigned int i=0;i<N;++i) {
       result.push_back(orderedResults[i].id);
   }
   return result;
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
 
 	embedV_t* model_d; embed_t* norms_d;
 	// load model
-	loadModel(norms, embeddings, numElems, model_d, norms_d);
+	loadModel(norms, embeddings, static_cast<uint32_t>(numElems), model_d, norms_d);
 
 	std::string word;
 	bool runCPU;
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
 		std::cout << "Found word \"" << word << "\" in position " << idx << std::endl;
 		if (runCPU) {
 			auto start = std::chrono::steady_clock::now();
-			results = sequentialSearch(norms, embeddings, numElems, idx, 11);
+			results = sequentialSearch(norms, embeddings, static_cast<uint32_t>(numElems), idx, 11);
 			auto stop = std::chrono::steady_clock::now();
 			std::cout << "Most similar N words with CPU:" << std::endl;
 			for (int i = 0; i < 11; ++i) {
@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
 				<< " milliseconds\n";
 		}
         auto startGPU = std::chrono::steady_clock::now();
-        results  = runCuda(norms, embeddings, numElems, idx,11, model_d, norms_d, returnCode);
+        runCuda(norms, embeddings, static_cast<uint32_t>(numElems), idx, 11, model_d, norms_d, returnCode, results);
         auto stopGPU = std::chrono::steady_clock::now();
 std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::milliseconds>(stopGPU - startGPU).count()
     << " milliseconds\n";   
