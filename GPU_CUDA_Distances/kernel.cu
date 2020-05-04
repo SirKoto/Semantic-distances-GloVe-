@@ -43,9 +43,7 @@ __global__ void DotProduct
 
 
 __global__ void FirstMerge
-(int N, embed_t *sims, unsigned int* pos, unsigned int length, unsigned int pad) {
-
-  
+(unsigned int N, embed_t *sims, unsigned int* pos, unsigned int length, unsigned int pad) {
 	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int start=id*N;
 	unsigned int end=start+N;
@@ -53,29 +51,29 @@ __global__ void FirstMerge
     
     // Insertion sort, as N SHOULD be small
     
-	for(unsigned int i=start+1; i<end; i++)
-	{
-    if (i<length){
-		embed_t temp=sims[i];
-        unsigned int position=pos[i];
-		unsigned int j=i-1;
-		while((temp>sims[j]) && (j>=start))
+		for(unsigned int i=start+1; i<end; i++)
 		{
-			sims[j+1]=sims[j];
-            pos[j+1]=pos[j];
-			j=j-1;
+			if (i<length){
+				embed_t temp=sims[i];
+				unsigned int position=pos[i];
+				unsigned int j=i-1;
+				while((temp>sims[j]) && (j>=start))
+				{
+					sims[j+1]=sims[j];
+					pos[j+1]=pos[j];
+					j=j-1;
+				}
+				sims[(j+1)]=temp;
+				pos[(j+1)]=position;
+			}
+			else if (i<pad) {
+				for (unsigned int i=0;i<N;++i) {
+    				sims[id+i]=0;
+					pos[id+i]=0;
+				}
+			}
 		}
-		sims[(j+1)]=temp;
-        pos[(j+1)]=position;
 	}
-    else if (i<pad) {
-        for (unsigned int i=0;i<N;++i) {
-    	sims[id+i]=0;
-        pos[id+i]=0;
-        }
-    }
-    }
-}
 }
 
 __global__ void BotchedMergeSort
@@ -172,8 +170,8 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 
     //printf("%u\n",numRows);
 	embed_t* similarities;
-	gpuErrchk(cudaMallocHost((void**)&similarities, sizeof(embed_t) * N));
-	gpuErrchk(cudaMallocHost((void**)&positions, sizeof(embed_t) * N));
+	gpuErrchk(cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod));
+	gpuErrchk(cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod));
 
 
 	cudaEvent_t start, stop;
