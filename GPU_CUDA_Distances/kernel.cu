@@ -6,6 +6,17 @@
 #include <vector>
 #include "GlobalHeader.h"
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
+{
+	if (code != cudaSuccess)
+	{
+		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		if (abort) exit(code);
+	}
+}
+
+
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
 //rows determined as the amount of rows in a block
@@ -138,8 +149,8 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 
     //printf("%u\n",numRows);
 	embed_t* similarities;
-	cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod);
-    cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod);
+	gpuErrchk(cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod));
+    gpuErrchk(cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod));
 
 
 	cudaEvent_t start, stop;
@@ -154,38 +165,51 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
 	unsigned int numBytesNorms = sizeof(embed_t) * numRows;
 	unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
 
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
+	gpuErrchk(cudaEventCreate(&start));
+	gpuErrchk(cudaEventCreate(&stop));
     
-	cudaMalloc((embed_t**)&A_d, numBytesQuery); 
-	cudaMalloc((embed_t**)&B_d, numBytesModel); 
-	cudaMalloc((embed_t**)&C_d, numBytesSims); 
-	cudaMalloc((unsigned int**)&pos_d, numBytesSims); 
-	cudaMalloc((embed_t**)&norms_d, numBytesNorms); 
+	gpuErrchk(cudaMalloc((embed_t**)&A_d, numBytesQuery)); 
+	gpuErrchk(cudaMalloc((embed_t**)&B_d, numBytesModel)); 
+	gpuErrchk(cudaMalloc((embed_t**)&C_d, numBytesSims)); 
+	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims)); 
+	gpuErrchk(cudaMalloc((embed_t**)&norms_d, numBytesNorms)); 
 
 
-	cudaMalloc((embed_t**)&CAux_d, numBytesSims); 
-	cudaMalloc((unsigned int**)&posAux_d, numBytesSims); 
+	gpuErrchk(cudaMalloc((embed_t**)&CAux_d, numBytesSims)); 
+	gpuErrchk(cudaMalloc((unsigned int**)&posAux_d, numBytesSims)); 
 
 
-	cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice);
-	cudaMemcpyAsync(B_d, model, numBytesModel, cudaMemcpyHostToDevice);
-	cudaMemcpyAsync(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice);
+	gpuErrchk(cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpyAsync(B_d, model, numBytesModel, cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpyAsync(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice));
 
-	cudaEventRecord(start, 0);
+	gpuErrchk(cudaEventRecord(start, 0));
 
 	DotProduct<<<nBlocks, nThreads >>>(numRows, A_d, B_d, C_d, pos_d,normA, norms_d);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaDeviceSynchronize());// Coment this on release
 
     
     FirstMerge<<<nBlocks, nThreads >>>(N,C_d,pos_d,numRows,numRowsMod);
-  
+    gpuErrchk( cudaPeekAtLastError() );
+    gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+
+
     unsigned long toReduce=((numRowsMod/N)/2);
     bool alternate=true;
     while(toReduce>0) {
         nBlocks=((toReduce*N)/nThreads)+1;
         //printf("%lu\n",toReduce*N);
-        if (alternate) BotchedMergeSort<<<nBlocks, nThreads >>>(N, C_d, pos_d,CAux_d,posAux_d,toReduce*N);
-        else BotchedMergeSort<<<nBlocks, nThreads >>>(N, CAux_d,posAux_d,C_d, pos_d,toReduce*N);
+        if (alternate) {
+            BotchedMergeSort<<<nBlocks, nThreads >>>(N, C_d, pos_d,CAux_d,posAux_d,toReduce*N);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+        }
+        else {
+            BotchedMergeSort<<<nBlocks, nThreads >>>(N, CAux_d,posAux_d,C_d, pos_d,toReduce*N);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+        }
         if (toReduce>1){
             toReduce+=toReduce%2;
             }
@@ -194,30 +218,25 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     }
     
     if (alternate){
-	cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
-  	cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
+        gpuErrchk(cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost)); 
+        gpuErrchk(cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost)); 
     }
     else {
-    cudaMemcpyAsync(similarities, CAux_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost); 
-  	cudaMemcpyAsync(positions, posAux_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost); 
+        gpuErrchk(cudaMemcpyAsync(similarities, CAux_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost)); 
+        gpuErrchk(cudaMemcpyAsync(positions, posAux_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost)); 
 
     }
 
-  cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess) {
-      fprintf(stderr, "ERROR: %s \n", cudaGetErrorString(error));
-      returnCode=1;
-    }
-	cudaFree(B_d);
-	cudaFree(norms_d);
-	cudaFree(A_d);
-	cudaFree(CAux_d);
-	cudaFree(C_d);
-	cudaFree(pos_d);
-	cudaFree(posAux_d);
+	gpuErrchk(cudaFree(B_d));
+	gpuErrchk(cudaFree(norms_d));
+	gpuErrchk(cudaFree(A_d));
+	gpuErrchk(cudaFree(CAux_d));
+	gpuErrchk(cudaFree(C_d));
+	gpuErrchk(cudaFree(pos_d));
+	gpuErrchk(cudaFree(posAux_d));
 
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
+	gpuErrchk(cudaEventRecord(stop, 0));
+	gpuErrchk(cudaEventSynchronize(stop));
 	
     //printf("\nSimilarity vector\n");
     
@@ -228,7 +247,7 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     
     
 
-	cudaEventElapsedTime(&elapsedTime, start, stop);
+	gpuErrchk(cudaEventElapsedTime(&elapsedTime, start, stop));
 	printf("\nSimilarities\n");
 	printf("Vector Size: %d\n", numRows);
 	printf("nThreads: %d\n", nThreads);
@@ -241,8 +260,8 @@ std::vector<unsigned int> runCuda(embed_t* norms, embedV_t* model, int32_t numRo
     results.push_back(positions[i]);
     }
 
-	cudaFreeHost(similarities);
-	cudaFreeHost(positions);
+	gpuErrchk(cudaFreeHost(similarities));
+	gpuErrchk(cudaFreeHost(positions));
 
 
 	return results;
