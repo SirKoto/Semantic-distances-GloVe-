@@ -42,32 +42,43 @@ __global__ void DotProduct
 }
 
 
+
 __global__ void FirstMerge
-(unsigned int N, embed_t *sims, unsigned int* pos, unsigned int length, unsigned int pad) {
-	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int start=id*N;
-	unsigned int end=start+N;
+(int64_t N, embed_t *sims, unsigned int* pos, int64_t length, int64_t pad) {
+	int64_t id = blockIdx.x * blockDim.x + threadIdx.x;
+	int64_t start=id*N;
+	int64_t end=start+N;
     if (start<length) { 
     
     // Insertion sort, as N SHOULD be small
     
-		for(unsigned int i=start+1; i<end; i++)
+		for(int64_t i=start+1; i<end; i++)
 		{
 			if (i<length){
+                /*if (i >= pad || i < 0) {
+                    printf("ERRORR1 %i\n", i);
+                }*/
 				embed_t temp=sims[i];
-				unsigned int position=pos[i];
-				unsigned int j=i-1;
-				while((temp>sims[j]) && (j>=start))
+				int64_t position=pos[i];
+                int64_t j=i-1;
+                
+				while((j>=start) && (temp>sims[j]) )
 				{
 					sims[j+1]=sims[j];
 					pos[j+1]=pos[j];
-					j=j-1;
+                    j=j-1;
+                    /*if (j >= pad || j < -1) {
+						printf("ERRORR3 %i\n", j);
+					}*/
 				}
 				sims[(j+1)]=temp;
 				pos[(j+1)]=position;
 			}
 			else if (i<pad) {
-				for (unsigned int i=0;i<N;++i) {
+				for (int64_t i=0;i<N;++i) {
+                    /*if (id+i >= pad || id+i < -1) {
+						printf("ERRORR4 %i\n", i);
+					}*/
     				sims[id+i]=0;
 					pos[id+i]=0;
 				}
@@ -119,10 +130,6 @@ __global__ void BotchedMergeSort
    
 }
 }
-
-
-extern "C"
-void reservePinnedMemory(embed_t * &ptr, size_t bytes);
 
 
 extern "C"
