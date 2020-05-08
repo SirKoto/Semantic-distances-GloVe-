@@ -17,11 +17,16 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 	}
 }
 
+__device__ __constant__
+embedV_t* c_model;
+__device__ __constant__
+embed_t* c_norms;
+
 //rows determined as the amount of rows in a block
 // A is query vector, B is the model ( rows ), C is output matrix
 // Rows should be 300 for proper usage of this access method
 __global__ void DotProduct
-(int rows, embed_t *A, embedV_t *B, embed_t *C,unsigned int *pos, embed_t normA, embed_t *normsB) {
+(int rows, embed_t *A, embed_t *C,unsigned int *pos, embed_t normA) {
   __shared__ embed_t fastA[numEmbeds];
   
   unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -34,9 +39,9 @@ __global__ void DotProduct
   //unsigned long identifier=id*numEmbeds;
   embed_t acum=0;
   for(unsigned long i=0;i<numEmbeds;++i) {
-      acum+=fastA[i] * B[id].data[i];
+      acum+=fastA[i] * c_model[id].data[i];
   }
-  C[id]=acum/(normA*normsB[id]);
+  C[id]=acum/(normA * c_norms[id]);
   pos[id]=id;
   }
 }
@@ -132,36 +137,33 @@ __global__ void BotchedMergeSort
 }
 
 
+
+// Load memory into cuda constants. This memory will be freed automatically at the end of the cuda context
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, embedV_t* &B_d, embed_t* & norms_d)
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
 {
 	size_t numBytesModel = sizeof(embedV_t) * numRows;
 	size_t numBytesNorms = sizeof(embed_t) * numRows;
+	embedV_t* modelSym;
+	embed_t* normsSym;
 
-	gpuErrchk(cudaMalloc((embed_t**)&B_d, numBytesModel));
-	gpuErrchk(cudaMalloc((embed_t**)&norms_d, numBytesNorms));
+	gpuErrchk(cudaMalloc((embed_t**)&modelSym, numBytesModel));
+	gpuErrchk(cudaMalloc((embed_t**)&normsSym, numBytesNorms));
 
-	gpuErrchk(cudaMemcpy(B_d, model, numBytesModel, cudaMemcpyHostToDevice));
-	gpuErrchk(cudaMemcpy(norms_d, norms, numBytesNorms, cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(modelSym, model, numBytesModel, cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(normsSym, norms, numBytesNorms, cudaMemcpyHostToDevice));
+
+	gpuErrchk(cudaMemcpyToSymbol(c_model, (void**)&modelSym, sizeof(modelSym)));
+	gpuErrchk(cudaMemcpyToSymbol(c_norms, (void**)&normsSym, sizeof(normsSym)));
+
+	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+
 }
 
-extern "C"
-void freeAll(embedV_t * &B_d, embed_t * &norms_d)
-{
-	gpuErrchk(cudaFree(norms_d));
-	gpuErrchk(cudaFree(B_d));
-}
-
 
 extern "C"
-void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, embedV_t * B_d, embed_t * norms_d, int &returnCode, std::vector<unsigned int> &res)
+void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
 {
-	if (!B_d || !norms_d) {
-		fprintf(stderr, "Memory not initialized\n");
-		returnCode = 1;
-		res = {};
-		return;
-	}
 
 	embedV_t queryTerm;
 	embed_t* A_d;
@@ -207,7 +209,7 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 
 	gpuErrchk(cudaEventRecord(start, 0));
 
-	DotProduct<<<nBlocks, nThreads >>>(numRows, A_d, B_d, C_d, pos_d,normA, norms_d);
+	DotProduct<<<nBlocks, nThreads >>>(numRows, A_d,  C_d, pos_d,normA);
 	gpuErrchk(cudaPeekAtLastError());
 	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
     
