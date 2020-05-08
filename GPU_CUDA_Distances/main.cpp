@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
 	int returnCode = 0;
 	std::vector<unsigned int> results;
 
-	std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
+	std::cout << "Enter word to look for similarities  and (0/1) to run CPU" << std::endl;
 	while (returnCode == 0 && std::cin >> word >> runCPU) {
 		// Search word
 		unsigned int idx = loader::binary_search(words, word);
@@ -125,7 +125,7 @@ std::cout << "GPU execution took: "<< std::chrono::duration_cast<std::chrono::mi
         }
         
        
-		std::cout << "Enter word to look for similarities  [(bool) run CPU]" << std::endl;
+		std::cout << "Enter word to look for similarities  and (0/1) to run CPU" << std::endl;
 	}
 
 	// free data

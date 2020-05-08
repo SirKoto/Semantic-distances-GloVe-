@@ -60,7 +60,7 @@ bool loader::loadData(const std::string& filename,
 		int actualP = idx * 100 / numWords;
 		if (actualP > progress) {
 			progress = actualP;
-			std::cout << "\rProgress: " << progress << " %";
+			std::cout << "\rProgress: " << progress << " %" << std::flush;
 		}
 
 	}
