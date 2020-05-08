@@ -32,8 +32,11 @@ bool loader::loadData(const std::string& filename,
 			numWords += 1;
 		}
 	}
-
 	std::chrono::steady_clock::time_point linesCounted = std::chrono::steady_clock::now();
+
+	std::cout << "Lines counted: " << numWords << std::endl;
+	std::cout << "Count lines = " << std::chrono::duration_cast<std::chrono::microseconds>(linesCounted - begin).count() << " us " << std::endl;
+
 
 	// reserve
 	words.resize(numWords);
@@ -45,6 +48,7 @@ bool loader::loadData(const std::string& filename,
 	stream.clear(); // must clear error flags (eof)
 	stream.seekg(0);
 	size_t idx = 0;
+	int progress = -1;
 	while (idx < numWords) {
 		stream >> words[idx] >> norms[idx]; // load word and precomputed norm
 
@@ -52,13 +56,21 @@ bool loader::loadData(const std::string& filename,
 			stream >> embedings[idx][i]; // load embeding
 		}
 		idx += 1;
+
+		int actualP = idx * 100 / numWords;
+		if (actualP > progress) {
+			progress = actualP;
+			std::cout << "\rProgress: " << progress << " %" << std::flush;
+		}
+
 	}
+	std::cout << "\rProgress: 100 %" << std::endl;
+
 
 	std::chrono::steady_clock::time_point dataLoaded = std::chrono::steady_clock::now();
 
 	stream.close();
 
-	std::cout << "Count lines = " << std::chrono::duration_cast<std::chrono::microseconds>(linesCounted - begin).count() << " us " << std::endl;
 	std::cout << "Load data = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - linesCounted).count() << " us " << std::endl;
 	std::cout << "Total loading time = " << std::chrono::duration_cast<std::chrono::microseconds>(dataLoaded - begin).count() << " us " << std::endl;
 
