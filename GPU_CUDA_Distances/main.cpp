@@ -78,7 +78,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	// load model
+	auto startPreloadData = std::chrono::steady_clock::now();
 	loadModel(norms, embeddings, static_cast<uint32_t>(numElems));
+	auto endPreloadData = std::chrono::steady_clock::now();
+	std::cout << "Data preloading took: " << std::chrono::duration_cast<std::chrono::milliseconds>(endPreloadData - startPreloadData).count()
+		<< " milliseconds\n";
 
 	std::string word;
 	bool runCPU;

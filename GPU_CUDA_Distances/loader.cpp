@@ -48,6 +48,7 @@ bool loader::loadData(const std::string& filename,
 	stream.clear(); // must clear error flags (eof)
 	stream.seekg(0);
 	size_t idx = 0;
+	int progress = -1;
 	while (idx < numWords) {
 		stream >> words[idx] >> norms[idx]; // load word and precomputed norm
 
@@ -55,7 +56,16 @@ bool loader::loadData(const std::string& filename,
 			stream >> embedings[idx][i]; // load embeding
 		}
 		idx += 1;
+
+		int actualP = idx * 100 / numWords;
+		if (actualP > progress) {
+			progress = actualP;
+			std::cout << "\rProgress: " << progress << " %";
+		}
+
 	}
+	std::cout << "\rProgress: 100 %" << std::endl;
+
 
 	std::chrono::steady_clock::time_point dataLoaded = std::chrono::steady_clock::now();
 
