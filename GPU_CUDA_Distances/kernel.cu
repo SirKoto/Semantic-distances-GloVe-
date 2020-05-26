@@ -160,6 +160,14 @@ void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
 
 }
 
+// FUNCTIONS DEFINED IN CUDAHELP.CU
+extern "C"
+void reservePinnedMemory(embed_t* &ptr, size_t bytes);
+
+extern "C"
+void freePinnedMemory(void* ptr);
+
+// MAIN FUNCTION TO RUN
 
 extern "C"
 void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
@@ -179,8 +187,10 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 
     //printf("%u\n",numRows);
 	embed_t* similarities;
-	gpuErrchk(cudaMallocHost((void**)&similarities, sizeof(embed_t) * numRowsMod));
-	gpuErrchk(cudaMallocHost((void**)&positions, sizeof(embed_t) * numRowsMod));
+	reservePinnedMemory(similarities, sizeof(embed_t) * numRowsMod);
+	positions = reinterpret_cast<unsigned int*>(similarities);
+	similarities = nullptr;
+	reservePinnedMemory(similarities, sizeof(embed_t) * numRowsMod);
 
 
 	cudaEvent_t start, stop;
@@ -285,8 +295,8 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 		results.push_back(positions[i]);
     }
 
-	gpuErrchk(cudaFreeHost(similarities));
-	gpuErrchk(cudaFreeHost(positions));
+	freePinnedMemory(similarities);
+	freePinnedMemory(positions);
 
 	res = results;
 }
