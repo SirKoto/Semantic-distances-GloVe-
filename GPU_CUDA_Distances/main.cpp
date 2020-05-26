@@ -57,8 +57,10 @@ std::vector<unsigned int> sequentialSearch(embed_t* norms,embedV_t* embeddings,u
 
 int main(int argc, char* argv[]) {
 
-	if (argc != 2) {
+	if (argc != 2 && argc != 3) {
 		std::cout << "Needs a file to load" << std::endl;
+		std::cout << "./exe [txt full file]" << std::endl;
+		std::cout << "./exe [txt strings] [bin file with embeddings and norms]" << std::endl;
 		return 0;
 	}
 
@@ -67,7 +69,12 @@ int main(int argc, char* argv[]) {
 	embedV_t* embeddings;
 	size_t numElems;
 
-	int res = loader::loadData(argv[1], numElems, words, norms, embeddings);
+	int res;
+	if(argc == 2) {
+		res = loader::loadData(argv[1], numElems, words, norms, embeddings);
+	} else { // argc == 3
+			res = loader::loadData(argv[1], argv[2], numElems, words, norms, embeddings);
+	}
 
 	if (res) {
 		std::cout << "Embedings loaded" << std::endl;
