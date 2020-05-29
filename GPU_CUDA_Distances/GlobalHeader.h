@@ -5,6 +5,7 @@
 // embeding type
 typedef float embed_t;
 #define numEmbeds 300
+#define maxN 11
 
 // This defines the description of a word in a vector
 struct embedV_t {
