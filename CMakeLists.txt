@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 project(TGA_Project LANGUAGES CXX CUDA)
 set (CMAKE_CXX_STANDARD 11)
 
+
+# Uncomment the following line to avoid using pinned memory
+# add_compile_definitions(NOT_PINNED_MEMORY)
+
 set(SRC_DIR "GPU_CUDA_Distances")
 
 set(CU_SRC_FILES ${SRC_DIR}/kernel.cu ${SRC_DIR}/CudaHelp.cu)

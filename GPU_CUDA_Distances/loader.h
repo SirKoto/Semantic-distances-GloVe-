@@ -15,6 +15,13 @@ public:
 		embed_t*& norms,
 		embedV_t*& embedings);
 
+	static bool loadData(const std::string& keysFile,
+		const std::string& valueFile,
+		size_t& numWords,
+		std::vector<std::string>& words,
+		embed_t*& norms,
+		embedV_t*& embedings);
+
 	// Free from memory
 	static void freeData(
 		embed_t* norms,
