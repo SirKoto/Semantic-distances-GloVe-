@@ -42,34 +42,42 @@
 	\section*{Implementació}
 	Hi ha dues versions correctament implementades del projecte, amb resultats finals equivalents.
 	
-	Aquestes versions també son equivalents al codi seqüencial, trobat al fitxer \textit{main.cpp} en la funció \verb|sequentialSearch()|. Aquesta, donat un vector d'\textit{embeddings}, l'index d'un d'aquests, i un nombre N, troba d'entre tots els \textit{embeddings} del vector els N més semblants a l'\textit{embedding} identificat per l'index.
+	Aquestes versions també són equivalents al codi seqüencial, trobat al fitxer \textit{main.cpp} en la funció \verb|sequentialSearch()|. Aquesta, donat un vector d'\textit{embeddings}, l'índex d'un d'aquests, i un nombre N, troba d'entre tots els \textit{embeddings} del vector els N més semblants a l'\textit{embedding} identificat per l'índex.
 	
 	\subsection*{Algoritme}
 	Qualsevol dels algoritmes implementats per a solucionar aquest problema es basen en 3 parts.
 	\begin{enumerate}
-		\item Trobar la paraula en el vector d'\textit{embeddings}. Aquest pas sempre és du a terme amb una cerca binària en CPU, per tant no el discutirem en aquest document.
-		\item Dur a terme el comput de les distancies de cosinus (o similituds de cosinus) entre tots els \textit{embeddings} i l'\textit{embedding} de la paraula cercada.
+		\item Trobar la paraula en el vector d'\textit{embeddings}. Aquest pas sempre es du a terme amb una cerca binària en CPU, per tant no el discutirem en aquest document.
+		\item Dur a terme el còmput de les distàncies de cosinus (o similituds de cosinus) entre tots els \textit{embeddings} i l'\textit{embedding} de la paraula cercada.
 		\item Filtrar els resultats, i escollir les N paraules més semblants (amb major similitud) a la paraula cercada amb les dades calculades, de manera ordenada.
 	\end{enumerate}
 	
-	Els punts 2 i 3, es troben tant implementats per a CPU, a \textit{main.cpp}, com per GPU, a \textit{kernel.cu}.
+	Els punts 2 i 3, es troben tan implementats per a CPU, a \textit{main.cpp}, com per GPU, a \textit{kernel.cu}.
 	
 	\subsection*{Càlcul de similituds}
-	El càlcul de les distancies o similituds es du a terme a GPU pel kernel \verb|DotProduct()|, el qual calcula el producte escalar amb cadascun dels \textit{embeddings}, i posteriorment en divideix el resultat pel producte de normes.
+	El càlcul de les distàncies o similituds es du a terme a GPU pel kernel \verb|DotProduct()|, el qual calcula el producte escalar amb cadascun dels \textit{embeddings}, i posteriorment en divideix el resultat pel producte de normes.
 	
-	Això és du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment la usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}.
+	Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment l'usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}.
 	
 	D'aquesta manera cada \textit{thread} computa una sola similitud.
 	
 	\subsection*{Filtrat i ordenació}
-	El filtrat per GPU requereix de conèixer les N paraules amb una major similitud. Per a això s'ha dividit el comput d'aquest procés en dues funcions.
+	El filtrat per GPU requereix conèixer les N paraules amb una major similitud. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
 	
-	La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de N elements, els quals son ordenats usant ordenació per inserció donat a que N sempre serà un nombre petit. La ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
-	D'aquesta forma, obtenim el vector de similituds en trossos de N elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector de index a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
+	La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de N elements, els quals són ordenats usant ordenació per inserció donat que N sempre serà un nombre petit. L'ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
+	D'aquesta forma, obtenim el vector de similituds en trossos de N elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector de índex a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
 	
-	Seguida i finalment la funció \verb|BotchedMergeSort()| aprofita es segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de N elements pre-ordenats en un de sol.\newline
-	Aquesta funció redueix el nombre de similituds a comparar a la meitat per cada crida, i és va usant fins que només resta un sol vector de N elements, el qual identifica les N paraules amb major similitud.
+	Seguida i finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de N elements preordenats en un de sol.\newline
+	Aquesta funció redueix el nombre de similituds a comparar a la meitat per cada crida, i es va usant fins que només resta un sol vector de N elements, el qual identifica les N paraules amb major similitud.
 	
+	\subsection*{Canvis de versió}
+	Les millores en la segona versió del programa són separables en canvis en el codi del kernel, i en carrega de les dades a memòria.
+	
+	Pel que fa al kernel, s'ha reduït l'espai de memòria reservat, utilitzant memòria local de cada \textit{thread} per emmagatzemar l'ordenació temporal en el mètode \verb|BotchedMergeSort()|. A més, s'ha afegit control d'errors complet.
+	
+	Per altra banda, s'ha millorat substancialment la càrrega a memòria separant l'arxiu d'input en dos, un que conté els \textit{strings} de les paraules, i un altre que conté les normes i els \textit{embeddings} ja en binari, per estalviar la conversió a float en temps d'execució, a més que el fitxer és de menor mida en binari.
+	
+	Finalment, s'ha afegit l'opció d'usar o no memòria \textit{pinned} segons una \textit{flag} de compilació.
 	
 	\section*{Resultats}
 	
