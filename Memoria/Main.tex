@@ -37,8 +37,19 @@
 	
 	\newpage
 	
-	\section*{Introducció}
-	
+\section*{Introducció}
+
+El problema a solucionar es la computació de similitud de paraules utilitzant el model word2vec de GloVe amb la mètrica de similitud de cosí.
+
+Word2Vec es una representació densa d'una paraula en un espai vectorial reduït, on la representació manté les analogies semàntiques amb operacions aritmètiques simples, com, per exemple, water + freeze = ice, o king - man + woman = queen. Això permet operar amb paraules, específicament, els seus significats, igual que es podria operar amb altres tipus de dades, permetent l'ús d'aquestes representacions per a múltiples tasques.
+
+Mentre que per a convertir una paraula a la seva representació densa es tan simple com accedir a un diccionari i extreure el valor, sent un procés només intensiu en espai, presenten una complicació al fer la conversió de la representació densa (word2vec) a la representació esparsa (el vocabulari de l'idioma en què word2vec va ser entrenat) aquesta conversió és especialment difícil si s'han fet operacions aritmètiques amb aquesta representació. La manera de fer aquesta conversió és trobar la paraula, o paraules, més properes, i per això s'utilitza la similitud de cosí. No s'utilitza la distància euclidiana típica, ja que aquesta mètrica ofereix poc significat en espais amb un gran nombre de dimensions, en el cas de molts models word2vec, l'espai és de 300 dimensions, per tant no és una métrica vàlida.
+
+La similitud de cosí és una mètrica de similitud que és utilitzada per ser fàcil de computar, i oferir valors en el rang de [-1,1], sent 1 el valor que indica absoluta similitud, aquesta mètrica es computa com a cosSim(A,B) = (AxB)/(|A|*|B|). Aquesta mètrica no mesura la distància en l'espai, sinó que mesura com de paral·leles són les representacions.
+
+\subsubsection*{Canvis al model}
+
+Per a la implementació de l'algoritme, primer hem obtingut el model de word2vec de GloVe, i l'hem modificat per ordenar alfabèticament les paraules i afegir les normes de cada representació densa al model propi, d'aquesta manera no és necessari computar la norma en cada operació de similitud. També, s'ha fet una millora en implementacions consecutives, on el model són dos fitxers, un amb les paraules ordenades, i un altre fitxer que és un binari amb les representacions denses. El model llavors està format per unes 2,2 milions de paraules, cada paraula és una línia al fitxer, primer la paraula, després la norma, després els 300 valors de la representació densa.	
 	\section*{Implementació}
 	Hi ha dues versions correctament implementades del projecte, amb resultats finals equivalents.
 	
