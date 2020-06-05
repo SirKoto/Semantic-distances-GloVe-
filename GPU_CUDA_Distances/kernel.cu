@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdio.h>
 #include <vector>
+#include <assert.h>
 #include "GlobalHeader.h"
 
 
@@ -26,7 +27,7 @@ embed_t* c_norms;
 // A is query vector, B is the model ( rows ), C is output matrix
 // Rows should be 300 for proper usage of this access method
 __global__ void DotProduct
-(int rows, embed_t *A, embed_t *C,unsigned int *pos, embed_t normA) {
+(const int rows, const embed_t *A, embed_t *C,unsigned int *pos, const embed_t normA) {
   __shared__ embed_t fastA[numEmbeds];
   
   unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -49,10 +50,10 @@ __global__ void DotProduct
 
 
 __global__ void FirstMerge
-(int64_t N, embed_t *sims, unsigned int* pos, int64_t length, int64_t pad) {
-	int64_t id = blockIdx.x * blockDim.x + threadIdx.x;
-	int64_t start=id*N;
-	int64_t end=start+N;
+(const int64_t N, embed_t *sims, unsigned int* pos, const int64_t length, const int64_t pad) {
+	const int64_t id = blockIdx.x * blockDim.x + threadIdx.x;
+	const int64_t start=id*N;
+	const int64_t end=start+N;
     if (start<length) { 
     
     // Insertion sort, as N SHOULD be small
@@ -63,8 +64,8 @@ __global__ void FirstMerge
                 /*if (i >= pad || i < 0) {
                     printf("ERRORR1 %i\n", i);
                 }*/
-				embed_t temp=sims[i];
-				int64_t position=pos[i];
+				const embed_t temp=sims[i];
+				const int64_t position=pos[i];
                 int64_t j=i-1;
                 
 				while((j>=start) && (temp>sims[j]) )
@@ -93,46 +94,48 @@ __global__ void FirstMerge
 }
 
 __global__ void BotchedMergeSort
-(int N, embed_t *sims,unsigned int* pos,embed_t *simsAux,unsigned int* posAux,unsigned long stride) {
+(const int N, embed_t *sims, unsigned int* pos, const unsigned long stride) {
 
-  
     unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
     id=id*N;
 	unsigned int posA=0,posB=0;
     if (id<stride) { 
+		unsigned int buffPos[maxN];
+		embed_t buffSims[maxN];
+		
         embed_t elemA=sims[(id+stride)];
         unsigned int posAuxA=pos[(id+stride)];
         embed_t elemB=sims[id];
         unsigned int posAuxB=pos[id];
 
-        sims[(id+stride)]=0;
         for(unsigned int i=0;i<N;++i) {
             if (posAuxA==posAuxB) {
                 ++posA;
                 elemA=sims[(id+posA+stride)];
                 posAuxA=pos[(id+posA+stride)];
-                sims[(id+posA+stride)]=0;
             }
             if (elemA>elemB && posA<N) {
                 ++posA;
-                simsAux[id+i]=elemA;
-                posAux[id+i]=posAuxA;
+                buffSims[i]=elemA;
+                buffPos[i]=posAuxA;
                 
                 elemA=sims[(id+posA+stride)];
                 posAuxA=pos[(id+posA+stride)];
-                sims[(id+posA+stride)]=0;
             }
             else {
                 ++posB;
-                simsAux[id+i]=elemB;
-                posAux[id+i]=posAuxB;
+                buffSims[i]=elemB;
+                buffPos[i]=posAuxB;
                 
                 elemB=sims[id+posB];
                 posAuxB=pos[id+posB];
 
             }
-        }
-   
+		}
+
+		memcpy(sims + id, buffSims, N * sizeof(embed_t));
+		memcpy(pos + id, buffPos, N * sizeof(unsigned int));
+	
 }
 }
 
@@ -173,10 +176,12 @@ extern "C"
 void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
 {
 
+	assert(N <= maxN);
+
 	embedV_t queryTerm;
 	embed_t* A_d;
-    embed_t *C_d,*CAux_d;
-    unsigned int *positions,*pos_d,*posAux_d;
+    embed_t *C_d;
+    unsigned int *positions,*pos_d;
 	unsigned int nBlocks=(numRows/512)+1;
 	int nThreads=512;
 	float elapsedTime;
@@ -211,9 +216,6 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims));
 
 
-	gpuErrchk(cudaMalloc((embed_t**)&CAux_d, numBytesSims));
-	gpuErrchk(cudaMalloc((unsigned int**)&posAux_d, numBytesSims));
-
 
 	gpuErrchk(cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice));
 
@@ -227,36 +229,22 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 	gpuErrchk(cudaPeekAtLastError());
 	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
 
-    unsigned long toReduce=((numRowsMod/N)/2);
-    bool alternate=true;
+	unsigned long toReduce=((numRowsMod/N)/2);
+	
     while(toReduce>0) {
         nBlocks=((toReduce*N)/nThreads)+1;
-        //printf("%lu\n",toReduce*N);
-		if (alternate) { 
-			BotchedMergeSort <<<nBlocks, nThreads >>> (N, C_d, pos_d, CAux_d, posAux_d, toReduce * N); 
-			gpuErrchk(cudaPeekAtLastError());
-			gpuErrchk(cudaDeviceSynchronize());// Coment this on release
-		}
-		else {
-			BotchedMergeSort <<<nBlocks, nThreads >>> (N, CAux_d, posAux_d, C_d, pos_d, toReduce * N);
-			gpuErrchk(cudaPeekAtLastError());
-			gpuErrchk(cudaDeviceSynchronize()); // Coment this on release
-		}
+		BotchedMergeSort <<<nBlocks, nThreads >>> (N, C_d, pos_d, toReduce * N);
+		gpuErrchk(cudaPeekAtLastError());
+		gpuErrchk(cudaDeviceSynchronize()); // Coment this on release
         if (toReduce>1){
             toReduce+=toReduce%2;
-            }
+		}
         toReduce=toReduce/2;
-        alternate=!alternate;
     }
-    
-    if (alternate) {
-		gpuErrchk(cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost));
-		gpuErrchk(cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost));
-    }
-    else {
-		gpuErrchk(cudaMemcpyAsync(similarities, CAux_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost));
-		gpuErrchk(cudaMemcpyAsync(positions, posAux_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost));
-    }
+	
+	// Because we don't use the similarities rigt now...
+	// gpuErrchk(cudaMemcpyAsync(similarities, C_d, sizeof(embed_t)*N, cudaMemcpyDeviceToHost));
+	gpuErrchk(cudaMemcpyAsync(positions, pos_d, sizeof(unsigned int)*N, cudaMemcpyDeviceToHost));
 
   cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
@@ -265,10 +253,8 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
     }
 
 	gpuErrchk(cudaFree(A_d));
-	gpuErrchk(cudaFree(CAux_d));
 	gpuErrchk(cudaFree(C_d));
 	gpuErrchk(cudaFree(pos_d));
-	gpuErrchk(cudaFree(posAux_d));
 
 	gpuErrchk(cudaEventRecord(stop, 0));
 	gpuErrchk(cudaEventSynchronize(stop));
