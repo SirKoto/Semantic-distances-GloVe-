@@ -95,6 +95,44 @@ Finalment, s'ha afegit l'opció d'usar o no memòria \textit{pinned} segons una 
 
 \section*{Resultats}
 
+Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 com per a no observar thrashing. El sistema no te límits a pinned memory, per tant totes les execucions s'han fet utilitzant pinned memory.
+
+En la implementació sequencial, com a mitja de 10 execucions, el temps d'execució mitjà d'una cerca es de 2425.9 ms, amb un error estàndard de 7.91ms, això significa que ha calculat 2.196.016 distàncies en una mitja de 905.2 distàncies calculades per ms.
+
+En la última implementació de CUDA, com a mitja de 10 execucions, el temps d'execució mitjà d'una cerca es de 36.8ms, amb un error estàndard de 1.58ms, això significa que ha calculat 2.196.016 distàncies en una mitja de 59674.3 distàncies calculades per ms. De els 3 kernels, DotProduct, FirstMerge i BotchedMergeSort, DotProduct ocupa uns 22ms, First Merge 0.8ms, i BotchedMergeSort 1.3ms, la resta sent overhead, per tant FirstMerge i BotchedMergeSort son negligibles comparat amb DotProduct.
+
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+      & CPU  & GPU \\ \hline
+ring  & 2405ms & 35ms  \\ \hline
+key   & 2397ms & 46ms  \\ \hline
+key   & 2410ms & 35ms  \\ \hline
+key   & 2403ms & 46ms  \\ \hline
+ring  & 2436ms & 31ms  \\ \hline
+king  & 2468ms & 35ms  \\ \hline
+king  & 2454ms & 35ms  \\ \hline
+ring  & 2419ms & 35ms  \\ \hline
+barca & 2414ms & 35ms  \\ \hline
+messi & 2453ms & 35ms  \\ \hline
+\end{tabular}
+\end{table}
+
+
+
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+      & Speedup respecte anterior  & Speedup respecte CPU \\ \hline
+Primera implementació  &  & ?? \\ \hline
+Segona implementació   & ?? & 65.92  \\ \hline
+\end{tabular}
+\end{table}
+
 \section*{Possibles millores}
 
 \newpage
