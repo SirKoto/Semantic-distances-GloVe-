@@ -173,7 +173,7 @@ void freePinnedMemory(void* ptr);
 // MAIN FUNCTION TO RUN
 
 extern "C"
-void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
+void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embed_t normA, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
 {
 
 	assert(N <= maxN);
@@ -199,10 +199,10 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 
 
 	cudaEvent_t start, stop;
-
-	queryTerm = model[queryTermPos]; // request the model to look for
-    
-	embed_t normA = norms[queryTermPos];
+    // request the model to look for
+	//queryTerm = model[queryTermPos]; 
+    queryTerm=A;
+	//embed_t normA = norms[queryTermPos];
 
 
 	unsigned int numBytesQuery = sizeof(embedV_t);
@@ -222,6 +222,7 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
 	gpuErrchk(cudaEventRecord(start, 0));
 
 	DotProduct<<<nBlocks, nThreads >>>(numRows, A_d,  C_d, pos_d,normA);
+    
 	gpuErrchk(cudaPeekAtLastError());
 	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
     
