@@ -29,21 +29,35 @@ embed_t* c_norms;
 __global__ void DotProduct
 (const int rows, const embed_t *A, embed_t *C,unsigned int *pos, const embed_t normA) {
   __shared__ embed_t fastA[numEmbeds];
-  
+  __shared__ embed_t partial[8*128];
   unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
   if (threadIdx.x<numEmbeds) {
       fastA[threadIdx.x]= A[threadIdx.x]; // only one embeding is on A
   }
   __syncthreads();
-  if (id<rows) {
+  if (id<rows*8) {
     
-  //unsigned long identifier=id*numEmbeds;
-  embed_t acum=0;
-  for(unsigned long i=0;i<numEmbeds;++i) {
-      acum+=fastA[i] * c_model[id].data[i];
+    unsigned long row=id/8; // Get row
+    unsigned long interiorId=id%8;  // Get id within row
+    unsigned long interiorRow=(row%128)*8;  // Get row within shared memory, shared memory acting as a local cache
+  partial[interiorRow+interiorId]=0;  // Initialize section of cache to be used as acumulator as 0
+  for(unsigned int i=interiorId;i<numEmbeds;i+=8) {
+      partial[interiorRow+interiorId]+=fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
   }
-  C[id]=acum/(normA * c_norms[id]);
-  pos[id]=id;
+  
+  if (interiorId<4) {  // Unrolling to reduce the 8 elements within a row to 1
+      partial[interiorRow+interiorId]+=partial[interiorRow+interiorId+4];
+  }
+  if (interiorId<2) {
+      partial[interiorRow+interiorId]+=partial[interiorRow+interiorId+2];
+  }
+    if (interiorId==0) { // Final step and write results
+        embed_t acum=0;
+      acum=partial[interiorRow+interiorId]+partial[interiorRow+interiorId+1];
+        C[row]=acum/(normA * c_norms[row]);
+      pos[row]=row;
+
+  }
   }
 }
 
@@ -182,8 +196,9 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embe
 	embed_t* A_d;
     embed_t *C_d;
     unsigned int *positions,*pos_d;
-	unsigned int nBlocks=(numRows/512)+1;
-	int nThreads=512;
+	unsigned int nBlocks=(numRows/128)+1;
+    unsigned int nBlocksOriginal=nBlocks;
+	int nThreads=1024;
 	float elapsedTime;
     
     unsigned int numRowsMod=numRows;
@@ -273,7 +288,7 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embe
 	printf("\nSimilarities\n");
 	printf("Vector Size: %d\n", numRows);
 	printf("nThreads: %d\n", nThreads);
-	printf("nBlocks: %d\n", (numRows/nThreads)+1);
+	printf("nBlocks: %d\n", nBlocksOriginal+1);
 	printf("Tiempo Total %4.6f ms\n", elapsedTime);
 	printf("Ancho de Banda %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
   
