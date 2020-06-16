@@ -38,22 +38,21 @@ __global__ void DotProduct
   if (id<rows*8) {
     
     unsigned long row=id/8; // Get row
-    unsigned long interiorId=id%8;  // Get id within row
-    unsigned long interiorRow=(row%128)*8;  // Get row within shared memory, shared memory acting as a local cache
-  partial[interiorRow+interiorId]=0;  // Initialize section of cache to be used as acumulator as 0
+    unsigned long interiorId=threadIdx.x%8;  // Get id within row
+    partial[threadIdx.x]=0;  // Initialize section of cache to be used as acumulator as 0
   for(unsigned int i=interiorId;i<numEmbeds;i+=8) {
-      partial[interiorRow+interiorId]+=fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
+      partial[threadIdx.x]+=fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
   }
   
   if (interiorId<4) {  // Unrolling to reduce the 8 elements within a row to 1
-      partial[interiorRow+interiorId]+=partial[interiorRow+interiorId+4];
+      partial[threadIdx.x]+=partial[threadIdx.x+4];
   }
   if (interiorId<2) {
-      partial[interiorRow+interiorId]+=partial[interiorRow+interiorId+2];
+      partial[threadIdx.x]+=partial[threadIdx.x+2];
   }
     if (interiorId==0) { // Final step and write results
         embed_t acum=0;
-      acum=partial[interiorRow+interiorId]+partial[interiorRow+interiorId+1];
+      acum=partial[threadIdx.x]+partial[threadIdx.x+1];
         C[row]=acum/(normA * c_norms[row]);
       pos[row]=row;
 
