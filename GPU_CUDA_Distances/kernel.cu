@@ -210,7 +210,7 @@ void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, uint32_t N)
 		positions = reinterpret_cast<unsigned int*>(tmp);
 	}
 
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	gpuErrchk(cudaDeviceSynchronize());// Comment this on release
 
 }
 
@@ -266,11 +266,11 @@ void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, in
 	DotProduct<<<nBlocks, N_THREADS >>>(numRows, A_d,  C_d, pos_d,normA);
     
 	gpuErrchk(cudaPeekAtLastError());
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	//gpuErrchk(cudaDeviceSynchronize());// Comment this on release
     
     FirstMerge<<<nBlocks, N_THREADS >>>(N,C_d,pos_d,numRows,numRowsMod);
 	gpuErrchk(cudaPeekAtLastError());
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	//gpuErrchk(cudaDeviceSynchronize());// Comment this on release
 
 	unsigned long toReduce=((numRowsMod/N)/2);
 	
@@ -278,7 +278,7 @@ void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, in
         nBlocks=((toReduce*N)/ N_THREADS)+1;
 		BotchedMergeSort <<<nBlocks, N_THREADS >>> (N, C_d, pos_d, toReduce * N);
 		gpuErrchk(cudaPeekAtLastError());
-		gpuErrchk(cudaDeviceSynchronize()); // Coment this on release
+		//gpuErrchk(cudaDeviceSynchronize()); // Comment this on release
         if (toReduce>1){
             toReduce+=toReduce%2;
 		}
