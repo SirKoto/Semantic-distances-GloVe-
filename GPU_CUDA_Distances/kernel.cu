@@ -43,13 +43,18 @@ __global__ void DotProduct
   for(unsigned int i=interiorId;i<numEmbeds;i+=8) {
       partial[threadIdx.x]+=fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
   }
-  
+  __syncwarp();
+
   if (interiorId<4) {  // Unrolling to reduce the 8 elements within a row to 1
       partial[threadIdx.x]+=partial[threadIdx.x+4];
   }
+  __syncwarp();
+
   if (interiorId<2) {
       partial[threadIdx.x]+=partial[threadIdx.x+2];
   }
+  __syncwarp();
+
     if (interiorId==0) { // Final step and write results
         embed_t acum=0;
       acum=partial[threadIdx.x]+partial[threadIdx.x+1];
