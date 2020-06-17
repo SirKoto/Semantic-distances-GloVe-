@@ -8,12 +8,14 @@
 #include "loader.h"
 #include <chrono> 
 #include <math.h> 
-extern "C"
-void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows);
-
 
 extern "C"
-void runCuda(embed_t * norms, embedV_t * model, uint32_t numRows, embedV_t A, embed_t normA, uint32_t N, int& returnCode, std::vector<unsigned int> & res);
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, uint32_t N);
+extern "C"
+void freeModel();
+
+extern "C"
+void runCuda(uint32_t numRows, embedV_t A, embed_t normA, uint32_t N, int& returnCode, std::vector<unsigned int> & res);
 
 bool customCompare(const embed_p& i, const embed_p& j) { return (i.data >= j.data); }
 std::vector<unsigned int> sequentialSearch(embed_t* norms, embedV_t* embeddings, unsigned int numElems, embedV_t A, unsigned int N) {
@@ -89,7 +91,7 @@ int main(int argc, char* argv[]) {
 
 	// load model
 	auto startPreloadData = std::chrono::steady_clock::now();
-	loadModel(norms, embeddings, static_cast<uint32_t>(numElems));
+	loadModel(norms, embeddings, static_cast<uint32_t>(numElems), 11);
 	auto endPreloadData = std::chrono::steady_clock::now();
 	std::cout << "Data preloading took: " << std::chrono::duration_cast<std::chrono::milliseconds>(endPreloadData - startPreloadData).count()
 		<< " milliseconds\n";
@@ -99,12 +101,13 @@ int main(int argc, char* argv[]) {
 	int returnCode = 0;
 	std::vector<unsigned int> results;
 
-	std::cout << "Enter word to look for similarities in this input (word +/- words !) and (0/1) to run CPU" << std::endl;
+	const std::string promptMSG ="Enter word to look for similarities: either 'word (0/1)' or 'word ((+/-) words)* ! (0/1)'. The second (0/1) specifies wether to run on CPU";
+	std::cout << promptMSG << std::endl;
 	embedV_t A;
 	while (returnCode == 0 && std::cin >> word) {
 		unsigned int idx = loader::binary_search(words, word);
 		if (idx == -1) {
-			std::cout << "Could not find word!!!!" << std::endl;
+			std::cout << "Could not find word!!!!\n" << promptMSG<< std::endl;
 			continue;
 		}
 		A = embeddings[idx];
@@ -169,7 +172,7 @@ int main(int argc, char* argv[]) {
 				<< " milliseconds\n";
 		}
 		auto startGPU = std::chrono::steady_clock::now();
-		runCuda(norms, embeddings, static_cast<uint32_t>(numElems), A, normA, 11, returnCode, results);
+		runCuda(static_cast<uint32_t>(numElems), A, normA, 11, returnCode, results);
 		auto stopGPU = std::chrono::steady_clock::now();
 		std::cout << "GPU execution took: " << std::chrono::duration_cast<std::chrono::milliseconds>(stopGPU - startGPU).count()
 			<< " milliseconds\n";
@@ -184,11 +187,15 @@ int main(int argc, char* argv[]) {
 		}
 
 
-		std::cout << "Enter word to look for similarities  and (0/1) to run CPU" << std::endl;
+		std::cout << promptMSG << std::endl;
 	}
 
 	// free data
+	std::chrono::steady_clock::time_point beginFree = std::chrono::steady_clock::now();
 	loader::freeData(norms, embeddings);
+	freeModel();
+	std::chrono::steady_clock::time_point endFree = std::chrono::steady_clock::now();
+	std::cout << "Unloaded data = " << std::chrono::duration_cast<std::chrono::microseconds>(endFree - beginFree).count() << " us " << std::endl;
 
 	return returnCode;
 }

@@ -31,15 +31,15 @@ __global__ void DotProduct
 (const int rows, const embed_t* A, embed_t* C, unsigned int* pos, const embed_t normA) {
 	__shared__ embed_t fastA[numEmbeds];
 	__shared__ embed_t partial[N_THREADS];
-	unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
 	if (threadIdx.x < numEmbeds) {
 		fastA[threadIdx.x] = A[threadIdx.x]; // only one embeding is on A
 	}
 	__syncthreads();
 	if (id < rows * 8) {
 
-		unsigned long row = id / 8; // Get row
-		unsigned long interiorId = threadIdx.x % 8;  // Get id within row
+		unsigned int row = id / 8; // Get row
+		unsigned int interiorId = threadIdx.x % 8;  // Get id within row
 		partial[threadIdx.x] = 0;  // Initialize section of cache to be used as acumulator as 0
 		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
 			partial[threadIdx.x] += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
@@ -159,13 +159,33 @@ __global__ void BotchedMergeSort
 }
 
 
+embed_t *A_d;
+embed_t *C_d;
+unsigned int *positions, *pos_d;
+
+
+// FUNCTIONS DEFINED IN CUDAHELP.CU
+extern "C"
+void reservePinnedMemory(embed_t* &ptr, size_t bytes);
+
+extern "C"
+void freePinnedMemory(void* ptr);
 
 // Load memory into cuda constants. This memory will be freed automatically at the end of the cuda context
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, uint32_t N)
 {
-	size_t numBytesModel = sizeof(embedV_t) * numRows;
-	size_t numBytesNorms = sizeof(embed_t) * numRows;
+	assert(N <= maxN);
+
+	fprintf(stdout, "Reserving memory for %i rows, and N %i\n", numRows, N);
+	const size_t numBytesModel = sizeof(embedV_t) * numRows;
+	const size_t numBytesNorms = sizeof(embed_t) * numRows;
+	unsigned int numRowsMod=numRows;
+    if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
+	numRowsMod+=numRowsMod%2*N;
+	const unsigned int numBytesQuery = sizeof(embedV_t);
+	const unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
+	
 	embedV_t* modelSym;
 	embed_t* normsSym;
 
@@ -178,36 +198,10 @@ void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
 	gpuErrchk(cudaMemcpyToSymbol(c_model, (void**)&modelSym, sizeof(modelSym)));
 	gpuErrchk(cudaMemcpyToSymbol(c_norms, (void**)&normsSym, sizeof(normsSym)));
 
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
-
-}
-
-// FUNCTIONS DEFINED IN CUDAHELP.CU
-extern "C"
-void reservePinnedMemory(embed_t* &ptr, size_t bytes);
-
-extern "C"
-void freePinnedMemory(void* ptr);
-
-// MAIN FUNCTION TO RUN
-
-extern "C"
-void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embed_t normA, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
-{
-
-	assert(N <= maxN);
-
-	embedV_t queryTerm;
-	embed_t* A_d;
-    embed_t *C_d;
-    unsigned int *positions,*pos_d;
-	unsigned int nBlocks=(numRows/128)+1;
-    unsigned int nBlocksOriginal=nBlocks;
-	float elapsedTime;
-    
-    unsigned int numRowsMod=numRows;
-    if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
-    numRowsMod+=numRowsMod%2*N;
+	    
+	gpuErrchk(cudaMalloc((embed_t**)&A_d, numBytesQuery));
+	gpuErrchk(cudaMalloc((embed_t**)&C_d, numBytesSims));
+	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims));
 
 	{
 		embed_t* tmp;
@@ -216,23 +210,53 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embe
 		positions = reinterpret_cast<unsigned int*>(tmp);
 	}
 
+	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+
+}
+
+extern "C"
+void freeModel()
+{
+	gpuErrchk(cudaFree(A_d));
+	gpuErrchk(cudaFree(C_d));
+	gpuErrchk(cudaFree(pos_d));
+	freePinnedMemory(positions);
+
+	embed_t* sym;
+	gpuErrchk(cudaMemcpyFromSymbol(&sym, c_model, sizeof(embed_t*)));
+	gpuErrchk(cudaFree(sym));
+	gpuErrchk(cudaMemcpyFromSymbol(&sym, c_norms, sizeof(embed_t*)));
+	gpuErrchk(cudaFree(sym));
+
+}
+
+
+// MAIN FUNCTION TO RUN
+
+extern "C"
+void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
+{
+
+	assert(N <= maxN);
+
+
+	unsigned int nBlocks=(numRows/128)+1;
+    unsigned int nBlocksOriginal=nBlocks;
+	float elapsedTime;
+    
+    unsigned int numRowsMod=numRows;
+    if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
+    numRowsMod+=numRowsMod%2*N;
+
+
+
 	cudaEvent_t start, stop;
-    // request the model to look for
-	//queryTerm = model[queryTermPos]; 
-    queryTerm=A;
-	//embed_t normA = norms[queryTermPos];
 
-
-	unsigned int numBytesQuery = sizeof(embedV_t);
-	unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
+	const unsigned int numBytesQuery = sizeof(embedV_t);
+	// const unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
 
 	gpuErrchk(cudaEventCreate(&start));
 	gpuErrchk(cudaEventCreate(&stop));
-    
-	gpuErrchk(cudaMalloc((embed_t**)&A_d, numBytesQuery));
-	gpuErrchk(cudaMalloc((embed_t**)&C_d, numBytesSims));
-	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims));
-
 
 
 	gpuErrchk(cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice));
@@ -271,9 +295,6 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embe
       returnCode=1;
     }
 
-	gpuErrchk(cudaFree(A_d));
-	gpuErrchk(cudaFree(C_d));
-	gpuErrchk(cudaFree(pos_d));
 
 	gpuErrchk(cudaEventRecord(stop, 0));
 	gpuErrchk(cudaEventSynchronize(stop));
@@ -292,8 +313,6 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, embedV_t A, embe
     for (unsigned int i=0;i<N;++i) {
 		results.push_back(positions[i]);
     }
-
-	freePinnedMemory(positions);
 
 	res = results;
 }

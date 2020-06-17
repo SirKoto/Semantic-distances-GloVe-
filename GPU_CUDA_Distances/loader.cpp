@@ -187,14 +187,8 @@ bool loader::loadData(const std::string& keysFile,
 
 void loader::freeData(embed_t* norms, embedV_t* embedings)
 {
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-
 	freePinnedMemory(norms);
 	freePinnedMemory(embedings);
-	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-	std::cout << "Unloaded data = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " us " << std::endl;
-
-
 }
 
 unsigned int loader::binary_search(const std::vector<std::string>& words, const std::string& to_be_found) {
