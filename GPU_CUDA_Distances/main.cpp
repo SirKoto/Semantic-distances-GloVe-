@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
 		runCuda(static_cast<uint32_t>(numElems), A, normA, 11, returnCode, results);
 		auto stopGPU = std::chrono::steady_clock::now();
 		std::cout << "GPU execution took: " << std::chrono::duration_cast<std::chrono::milliseconds>(stopGPU - startGPU).count()
-			<< " milliseconds\n";
+			<< " milliseconds (CPU timed)\n";
 
 		std::cout << "Most similar N words:" << std::endl;
 		int counter = 0;

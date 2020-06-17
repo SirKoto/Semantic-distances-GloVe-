@@ -306,15 +306,13 @@ void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, in
 	printf("Vector Size: %d\n", numRows);
 	printf("nThreads: %d\n", N_THREADS);
 	printf("nBlocks: %d\n", nBlocksOriginal+1);
-	printf("Tiempo Total %4.6f ms\n", elapsedTime);
-	printf("Ancho de Banda %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
+	printf("Total Time with Events %4.6f ms\n", elapsedTime);
+	printf("Bandwidth %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
   
-    std::vector<unsigned int> results;
+	res.resize(N);
     for (unsigned int i=0;i<N;++i) {
-		results.push_back(positions[i]);
+		res[i] = positions[i];
     }
-
-	res = results;
 }
 
 
