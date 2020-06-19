@@ -37,13 +37,13 @@ __global__ void DotProduct
 	}
 	__syncthreads();
 	if (id < rows * 8) {
-
+		embed_t acum = 0; // Initialize accumulator
 		unsigned int row = id / 8; // Get row
 		unsigned int interiorId = threadIdx.x % 8;  // Get id within row
-		partial[threadIdx.x] = 0;  // Initialize section of cache to be used as acumulator as 0
 		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
-			partial[threadIdx.x] += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
+			acum += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
 		}
+        partial[threadIdx.x]=acum;
 		__syncwarp();
 
 		if (interiorId < 4) {  // Unrolling to reduce the 8 elements within a row to 1
@@ -57,7 +57,6 @@ __global__ void DotProduct
 		__syncwarp();
 
 		if (interiorId == 0) { // Final step and write results
-			embed_t acum = 0;
 			acum = partial[threadIdx.x] + partial[threadIdx.x + 1];
 			C[row] = acum / (normA * c_norms[row]);
 			pos[row] = row;
