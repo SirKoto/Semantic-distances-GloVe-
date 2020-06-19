@@ -26,9 +26,8 @@ embed_t* c_norms;
 
 //rows determined as the amount of rows in a block
 // A is query vector, B is the model ( rows ), C is output matrix
-// Rows should be 300 for proper usage of this access method
 __global__ void DotProduct
-(const int rows, const embed_t* A, embed_t* C, unsigned int* pos, const embed_t normA) {
+(const int limit, const embed_t* A, embed_t* C, unsigned int* pos, const embed_t normA) {
 	__shared__ embed_t fastA[numEmbeds];
 	__shared__ embed_t partial[N_THREADS];
 	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -36,14 +35,14 @@ __global__ void DotProduct
 		fastA[threadIdx.x] = A[threadIdx.x]; // only one embeding is on A
 	}
 	__syncthreads();
-	if (id < rows * 8) {
-
+	if (id < limit) {
+		embed_t acum = 0;
 		unsigned int row = id / 8; // Get row
 		unsigned int interiorId = threadIdx.x % 8;  // Get id within row
-		partial[threadIdx.x] = 0;  // Initialize section of cache to be used as acumulator as 0
 		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
-			partial[threadIdx.x] += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
+			acum += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
 		}
+        partial[threadIdx.x]=acum;
 		__syncwarp();
 
 		if (interiorId < 4) {  // Unrolling to reduce the 8 elements within a row to 1
@@ -57,7 +56,6 @@ __global__ void DotProduct
 		__syncwarp();
 
 		if (interiorId == 0) { // Final step and write results
-			embed_t acum = 0;
 			acum = partial[threadIdx.x] + partial[threadIdx.x + 1];
 			C[row] = acum / (normA * c_norms[row]);
 			pos[row] = row;
@@ -263,7 +261,7 @@ void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, in
 
 	gpuErrchk(cudaEventRecord(start, 0));
 
-	DotProduct<<<nBlocks, N_THREADS >>>(numRows, A_d,  C_d, pos_d,normA);
+	DotProduct<<<nBlocks, N_THREADS >>>(numRows*8, A_d,  C_d, pos_d,normA);
     
 	gpuErrchk(cudaPeekAtLastError());
 	//gpuErrchk(cudaDeviceSynchronize());// Comment this on release
