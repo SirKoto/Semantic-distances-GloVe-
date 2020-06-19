@@ -98,20 +98,22 @@ Els punts 2 i 3, es troben tan implementats per a CPU, a \textit{main.cpp}, com 
 \subsection*{Càlcul de similituds}
 El càlcul de les distàncies o similituds es du a terme a GPU pel kernel \verb|DotProduct()|, el qual calcula el producte escalar amb cadascun dels \textit{embeddings}, i posteriorment en divideix el resultat pel producte de normes.
 
-Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment l'usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}.
+Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment l'usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}, això es per fer ús de broadcast de memoria sobre els warps en una memòria de menor latència.
 
-D'aquesta manera cada \textit{thread} computa una sola similitud.
+D'aquesta manera cada \textit{thread} computa una sola similitud i inicialitza en el vector de posicions, la seva posició.
 
 \subsection*{Filtrat i ordenació}
-El filtrat per GPU requereix conèixer les N paraules amb una major similitud. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
+El filtrat per GPU requereix conèixer les N+1 paraules amb una major similitud, N+1 ja que una paraula sempre serà la seva paraula més semblant. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
 
-La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de N elements, els quals són ordenats usant ordenació per inserció donat que N sempre serà un nombre petit. L'ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
-D'aquesta forma, obtenim el vector de similituds en trossos de N elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector de índex a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
+La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de N+1 elements, els quals són ordenats usant ordenació per inserció donat que N+1 sempre serà un nombre petit. L'ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
+D'aquesta forma, obtenim el vector de similituds en trossos de N+1 elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector de índex a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
 
-Seguida i finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de N elements preordenats en un de sol.\newline
+Seguida i finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de N+1 elements preordenats en un de sol.\newline
 Aquesta funció redueix el nombre de similituds a comparar a la meitat per cada crida, i es va usant fins que només resta un sol vector de N elements, el qual identifica les N paraules amb major similitud.
 
 \subsection*{Canvis de versió}
+\subsubsection*{Segona versió}
+
 Les millores en la segona versió del programa són separables en canvis en el codi del kernel, i en carrega de les dades a memòria.
 
 Pel que fa al kernel, s'ha reduït l'espai de memòria reservat, utilitzant memòria local de cada \textit{thread} per emmagatzemar l'ordenació temporal en el mètode \verb|BotchedMergeSort()|. A més, s'ha afegit control d'errors complet.
@@ -120,30 +122,45 @@ Per altra banda, s'ha millorat substancialment la càrrega a memòria separant l
 
 Finalment, s'ha afegit l'opció d'usar o no memòria \textit{pinned} segons una \textit{flag} de compilació.
 
+
+\subsubsection*{Tercera versió}
+
+La millora en la tercera versió es només un canvi en el kernel \verb|DotProduct|, on s'ha canviat els accessos a memòria per a provocar accessos amb coalescència, fent els accesos consecutius en 32 bytes. Per aquest propòsit, s'han destinat 8 threads per similitud a calcular, ja que els embeddings son floats, això provoca accessos contigus en memoria en 32 bytes, que es el límit actual de coalescència d'accesos a memoria en CUDA. Per evitar sincronitzacions en acumuladors s'ha fet ús de shared memory, alocant 4 bytes a a cada thread com a acumulador, reduïnt els 300 elements d'un embedding en 8, finalment sent reduïts utilitzant una reducció per unrolling.
+
+\subsubsection*{Quarta versió}
+
+En la quarta versió s'han tret els overheads innecesaris presents al codi, com reservar memoria i alliberar-la cada execució si aquesta podia ser reutilitzada.
+
+
+
 \section*{Resultats}
 
-Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory}.
+Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2.
 
-En la implementació seqüencial, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms.
 
-En l'última implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|), \verb|DotProduct()| ocupa uns 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
+En la implementació seqüencial, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
+
+En la primera implementació en CUDA, com a mitjana de 10 execucions, amb una mija de $261.4$ms per execució, amb un error estàndard de $5.19$ms, això indica que ha calculat $2196016$ distàncies a una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps es transferencia de dades, específicament el model de uns 2GB, que cada execució es transferit a la GPU, en total, uns $203$ ms son transferències de Host a Device, $22.6$ms son l'execució del kernel de DotProduct, $1.2$ms el kernel de BotchedMergeSort, i $0.9$ms el kernel de FirstMerge, la resta sent overheads. La transferència de dades es 10 vegades més significativa que el kernel més costós, per tant, s'ha de treure, ja que les dades son constants.
+
+
+En la segona implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|), \verb|DotProduct()| ocupa uns 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
 
 
 \begin{table}[h]
 \centering
-\begin{tabular}{|l|l|l|}
+\begin{tabular}{|l|l|l|l|}
 \hline
-      & CPU  & GPU \\ \hline
-ring  & 2405ms & 35ms  \\ \hline
-key   & 2397ms & 46ms  \\ \hline
-key   & 2410ms & 35ms  \\ \hline
-key   & 2403ms & 46ms  \\ \hline
-ring  & 2436ms & 31ms  \\ \hline
-king  & 2468ms & 35ms  \\ \hline
-king  & 2454ms & 35ms  \\ \hline
-ring  & 2419ms & 35ms  \\ \hline
-barca & 2414ms & 35ms  \\ \hline
-messi & 2453ms & 35ms  \\ \hline
+      & CPU  & GPU Primera Implementació & GPU Segona implementació \\ \hline
+ring  & 2405ms & 273ms & 35ms  \\ \hline
+key   & 2397ms & 276ms & 46ms  \\ \hline
+key   & 2410ms & 240ms & 35ms  \\ \hline
+key   & 2403ms & 237ms & 46ms  \\ \hline
+ring  & 2436ms & 267ms & 31ms  \\ \hline
+king  & 2468ms & 266ms & 35ms  \\ \hline
+king  & 2454ms & 275ms & 35ms  \\ \hline
+ring  & 2419ms & 276ms & 35ms  \\ \hline
+barca & 2414ms & 238ms & 35ms  \\ \hline
+messi & 2453ms & 266ms & 35ms  \\ \hline
 \end{tabular}
 \end{table}
 
@@ -152,13 +169,16 @@ messi & 2453ms & 35ms  \\ \hline
 
 \begin{table}[h]
 \centering
-\begin{tabular}{|l|l|l|}
+\begin{tabular}{|l|l|l|l|}
 \hline
-      & Speedup respecte anterior  & Speedup respecte CPU \\ \hline
-Primera implementació  &  & ?? \\ \hline
-Segona implementació   & ?? & 65.92  \\ \hline
+      & Speedup respecte CPU & Speedup respecte anterior & Distàncies per ms \\ \hline
+CPU & 1 & 1 & 905.2 \\ \hline
+Primera implementació & 9.28 & 9.28 & 8400.98 \\ \hline
+Segona implementació & 65.92 & 7.10 & 59674.3  \\ \hline
 \end{tabular}
 \end{table}
+
+\newpage
 
 \section*{Millores descartades}
 
