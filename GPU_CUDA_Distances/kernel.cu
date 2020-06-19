@@ -7,6 +7,7 @@
 #include <assert.h>
 #include "GlobalHeader.h"
 
+#define N_THREADS 1024
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
@@ -27,24 +28,42 @@ embed_t* c_norms;
 // A is query vector, B is the model ( rows ), C is output matrix
 // Rows should be 300 for proper usage of this access method
 __global__ void DotProduct
-(const int rows, const embed_t *A, embed_t *C,unsigned int *pos, const embed_t normA) {
-  __shared__ embed_t fastA[numEmbeds];
-  
-  unsigned long id = blockIdx.x * blockDim.x + threadIdx.x;
-  if (threadIdx.x<numEmbeds) {
-      fastA[threadIdx.x]= A[threadIdx.x]; // only one embeding is on A
-  }
-  __syncthreads();
-  if (id<rows) {
-    
-  //unsigned long identifier=id*numEmbeds;
-  embed_t acum=0;
-  for(unsigned long i=0;i<numEmbeds;++i) {
-      acum+=fastA[i] * c_model[id].data[i];
-  }
-  C[id]=acum/(normA * c_norms[id]);
-  pos[id]=id;
-  }
+(const int rows, const embed_t* A, embed_t* C, unsigned int* pos, const embed_t normA) {
+	__shared__ embed_t fastA[numEmbeds];
+	__shared__ embed_t partial[N_THREADS];
+	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
+	if (threadIdx.x < numEmbeds) {
+		fastA[threadIdx.x] = A[threadIdx.x]; // only one embeding is on A
+	}
+	__syncthreads();
+	if (id < rows * 8) {
+
+		unsigned int row = id / 8; // Get row
+		unsigned int interiorId = threadIdx.x % 8;  // Get id within row
+		partial[threadIdx.x] = 0;  // Initialize section of cache to be used as acumulator as 0
+		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
+			partial[threadIdx.x] += fastA[i] * c_model[row].data[i]; // Accumulate within the shared memory space
+		}
+		__syncwarp();
+
+		if (interiorId < 4) {  // Unrolling to reduce the 8 elements within a row to 1
+			partial[threadIdx.x] += partial[threadIdx.x + 4];
+		}
+		__syncwarp();
+
+		if (interiorId < 2) {
+			partial[threadIdx.x] += partial[threadIdx.x + 2];
+		}
+		__syncwarp();
+
+		if (interiorId == 0) { // Final step and write results
+			embed_t acum = 0;
+			acum = partial[threadIdx.x] + partial[threadIdx.x + 1];
+			C[row] = acum / (normA * c_norms[row]);
+			pos[row] = row;
+
+		}
+	}
 }
 
 
@@ -140,13 +159,33 @@ __global__ void BotchedMergeSort
 }
 
 
+embed_t *A_d;
+embed_t *C_d;
+unsigned int *positions, *pos_d;
+
+
+// FUNCTIONS DEFINED IN CUDAHELP.CU
+extern "C"
+void reservePinnedMemory(embed_t* &ptr, size_t bytes);
+
+extern "C"
+void freePinnedMemory(void* ptr);
 
 // Load memory into cuda constants. This memory will be freed automatically at the end of the cuda context
 extern "C"
-void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
+void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows, uint32_t N)
 {
-	size_t numBytesModel = sizeof(embedV_t) * numRows;
-	size_t numBytesNorms = sizeof(embed_t) * numRows;
+	assert(N <= maxN);
+
+	fprintf(stdout, "Reserving memory for %i rows, and N %i\n", numRows, N);
+	const size_t numBytesModel = sizeof(embedV_t) * numRows;
+	const size_t numBytesNorms = sizeof(embed_t) * numRows;
+	unsigned int numRowsMod=numRows;
+    if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
+	numRowsMod+=numRowsMod%2*N;
+	const unsigned int numBytesQuery = sizeof(embedV_t);
+	const unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
+	
 	embedV_t* modelSym;
 	embed_t* normsSym;
 
@@ -159,83 +198,87 @@ void loadModel(embed_t * norms, embedV_t * model, uint32_t numRows)
 	gpuErrchk(cudaMemcpyToSymbol(c_model, (void**)&modelSym, sizeof(modelSym)));
 	gpuErrchk(cudaMemcpyToSymbol(c_norms, (void**)&normsSym, sizeof(normsSym)));
 
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	    
+	gpuErrchk(cudaMalloc((embed_t**)&A_d, numBytesQuery));
+	gpuErrchk(cudaMalloc((embed_t**)&C_d, numBytesSims));
+	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims));
+
+	{
+		embed_t* tmp;
+		static_assert(sizeof(embed_t) == sizeof(unsigned int), "the embed type needs to be of 4 bytes");
+		reservePinnedMemory(tmp, sizeof(embed_t) * numRowsMod);
+		positions = reinterpret_cast<unsigned int*>(tmp);
+	}
+
+	gpuErrchk(cudaDeviceSynchronize());// Comment this on release
 
 }
 
-// FUNCTIONS DEFINED IN CUDAHELP.CU
 extern "C"
-void reservePinnedMemory(embed_t* &ptr, size_t bytes);
+void freeModel()
+{
+	gpuErrchk(cudaFree(A_d));
+	gpuErrchk(cudaFree(C_d));
+	gpuErrchk(cudaFree(pos_d));
+	freePinnedMemory(positions);
 
-extern "C"
-void freePinnedMemory(void* ptr);
+	embed_t* sym;
+	gpuErrchk(cudaMemcpyFromSymbol(&sym, c_model, sizeof(embed_t*)));
+	gpuErrchk(cudaFree(sym));
+	gpuErrchk(cudaMemcpyFromSymbol(&sym, c_norms, sizeof(embed_t*)));
+	gpuErrchk(cudaFree(sym));
+
+}
+
 
 // MAIN FUNCTION TO RUN
 
 extern "C"
-void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTermPos, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
+void runCuda(uint32_t numRows, embedV_t queryTerm, embed_t normA, uint32_t N, int &returnCode, std::vector<unsigned int> &res)
 {
 
 	assert(N <= maxN);
 
-	embedV_t queryTerm;
-	embed_t* A_d;
-    embed_t *C_d;
-    unsigned int *positions,*pos_d;
-	unsigned int nBlocks=(numRows/512)+1;
-	int nThreads=512;
+
+	unsigned int nBlocks=(numRows/128)+1;
+    unsigned int nBlocksOriginal=nBlocks;
 	float elapsedTime;
     
     unsigned int numRowsMod=numRows;
     if (numRows%N!=0) numRowsMod=(N-numRows%N)+numRows;
     numRowsMod+=numRowsMod%2*N;
 
-    //printf("%u\n",numRows);
-	embed_t* similarities;
-	reservePinnedMemory(similarities, sizeof(embed_t) * numRowsMod);
-	positions = reinterpret_cast<unsigned int*>(similarities);
-	similarities = nullptr;
-	reservePinnedMemory(similarities, sizeof(embed_t) * numRowsMod);
 
 
 	cudaEvent_t start, stop;
 
-	queryTerm = model[queryTermPos]; // request the model to look for
-    
-	embed_t normA = norms[queryTermPos];
-
-
-	unsigned int numBytesQuery = sizeof(embedV_t);
-	unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
+	const unsigned int numBytesQuery = sizeof(embedV_t);
+	// const unsigned int numBytesSims = sizeof(unsigned int) * numRowsMod;
 
 	gpuErrchk(cudaEventCreate(&start));
 	gpuErrchk(cudaEventCreate(&stop));
-    
-	gpuErrchk(cudaMalloc((embed_t**)&A_d, numBytesQuery));
-	gpuErrchk(cudaMalloc((embed_t**)&C_d, numBytesSims));
-	gpuErrchk(cudaMalloc((unsigned int**)&pos_d, numBytesSims));
-
 
 
 	gpuErrchk(cudaMemcpyAsync(A_d, queryTerm.data, numBytesQuery, cudaMemcpyHostToDevice));
 
 	gpuErrchk(cudaEventRecord(start, 0));
 
-	DotProduct<<<nBlocks, nThreads >>>(numRows, A_d,  C_d, pos_d,normA);
-	gpuErrchk(cudaPeekAtLastError());
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	DotProduct<<<nBlocks, N_THREADS >>>(numRows, A_d,  C_d, pos_d,normA);
     
-    FirstMerge<<<nBlocks, nThreads >>>(N,C_d,pos_d,numRows,numRowsMod);
 	gpuErrchk(cudaPeekAtLastError());
-	gpuErrchk(cudaDeviceSynchronize());// Coment this on release
+	//gpuErrchk(cudaDeviceSynchronize());// Comment this on release
+    
+    FirstMerge<<<nBlocks, N_THREADS >>>(N,C_d,pos_d,numRows,numRowsMod);
+	gpuErrchk(cudaPeekAtLastError());
+	//gpuErrchk(cudaDeviceSynchronize());// Comment this on release
 
 	unsigned long toReduce=((numRowsMod/N)/2);
 	
     while(toReduce>0) {
-        nBlocks=((toReduce*N)/nThreads)+1;
-		BotchedMergeSort <<<nBlocks, nThreads >>> (N, C_d, pos_d, toReduce * N);
+        nBlocks=((toReduce*N)/ N_THREADS)+1;
+		BotchedMergeSort <<<nBlocks, N_THREADS >>> (N, C_d, pos_d, toReduce * N);
 		gpuErrchk(cudaPeekAtLastError());
-		gpuErrchk(cudaDeviceSynchronize()); // Coment this on release
+		//gpuErrchk(cudaDeviceSynchronize()); // Comment this on release
         if (toReduce>1){
             toReduce+=toReduce%2;
 		}
@@ -252,39 +295,24 @@ void runCuda(embed_t* norms, embedV_t* model, uint32_t numRows, uint32_t queryTe
       returnCode=1;
     }
 
-	gpuErrchk(cudaFree(A_d));
-	gpuErrchk(cudaFree(C_d));
-	gpuErrchk(cudaFree(pos_d));
 
 	gpuErrchk(cudaEventRecord(stop, 0));
 	gpuErrchk(cudaEventSynchronize(stop));
-	
-    //printf("\nSimilarity vector\n");
-    
-   /*for(int i=0;i<N;++i) {
-    printf("[ %f , %i ]",similarities[i],positions[i]);
-
-    }*/
     
     
 
 	gpuErrchk(cudaEventElapsedTime(&elapsedTime, start, stop));
 	printf("\nSimilarities\n");
 	printf("Vector Size: %d\n", numRows);
-	printf("nThreads: %d\n", nThreads);
-	printf("nBlocks: %d\n", (numRows/nThreads)+1);
-	printf("Tiempo Total %4.6f ms\n", elapsedTime);
-	printf("Ancho de Banda %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
+	printf("nThreads: %d\n", N_THREADS);
+	printf("nBlocks: %d\n", nBlocksOriginal+1);
+	printf("Total Time with Events %4.6f ms\n", elapsedTime);
+	printf("Bandwidth %4.3f GB/s\n", (numRows *numEmbeds* sizeof(float)) / (1000000 * elapsedTime));
   
-    std::vector<unsigned int> results;
+	res.resize(N);
     for (unsigned int i=0;i<N;++i) {
-		results.push_back(positions[i]);
+		res[i] = positions[i];
     }
-
-	freePinnedMemory(similarities);
-	freePinnedMemory(positions);
-
-	res = results;
 }
 
 
