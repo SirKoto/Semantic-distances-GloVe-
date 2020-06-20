@@ -35,6 +35,10 @@ std::vector<unsigned int> sequentialSearch(embed_t* norms, embedV_t* embeddings,
 		res.id = i;
 		similarities.push_back(res);
 	}
+    
+    
+    auto startPreloadData = std::chrono::steady_clock::now();
+
 	std::vector<embed_p> orderedResults;
 	for (unsigned int i = 0; i <= N; ++i) {
 		orderedResults.push_back(similarities[i]);
@@ -55,6 +59,10 @@ std::vector<unsigned int> sequentialSearch(embed_t* norms, embedV_t* embeddings,
 	for (unsigned int i = 0; i < N; ++i) {
 		result.push_back(orderedResults[i].id);
 	}
+    
+    	auto endPreloadData = std::chrono::steady_clock::now();
+            std::cout << "CPU ordering of top N took: " << std::chrono::duration_cast<std::chrono::milliseconds>(endPreloadData - startPreloadData).count() << " milliseconds\n";
+
 	return result;
 }
 
@@ -93,8 +101,7 @@ int main(int argc, char* argv[]) {
 	auto startPreloadData = std::chrono::steady_clock::now();
 	loadModel(norms, embeddings, static_cast<uint32_t>(numElems), 11);
 	auto endPreloadData = std::chrono::steady_clock::now();
-	std::cout << "Data preloading took: " << std::chrono::duration_cast<std::chrono::milliseconds>(endPreloadData - startPreloadData).count()
-		<< " milliseconds\n";
+	std::cout << "Data preloading took: " << std::chrono::duration_cast<std::chrono::milliseconds>(endPreloadData - startPreloadData).count() << " milliseconds\n";
 
 	std::string word;
 	bool runCPU;
