@@ -7,6 +7,10 @@
 #include <assert.h>
 #include "GlobalHeader.h"
 #define FULL_MASK 0xffffffff
+#define HALF_MASK 0xf0f0f0f0
+#define QUARTER_MASK 0xc0c0c0c0
+#define SINGULAR_MASK 0x80808080
+
 #define N_THREADS 1024
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -41,18 +45,9 @@ __global__ void DotProduct
 		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
 			acum += fastA[i] * c_model[row].data[i]; // Accumulate within the accumulator
 		}
-		unsigned overMask = interiorId < 4 ? FULL_MASK : 0;
-		const unsigned tidMask = (1 << threadIdx.x);
-		unsigned mask = tidMask | (1 << threadIdx.x + 4);
-		acum += __shfl_down_sync(mask & overMask, acum, 4); // Reduction
-
-		overMask = interiorId < 2 ? FULL_MASK : 0;
-		mask = tidMask | (1 << threadIdx.x + 2);
-		acum += __shfl_down_sync(mask & overMask, acum, 2); // Reduction
-
-		overMask = interiorId == 0 ? FULL_MASK : 0;
-		mask = tidMask | (1 << threadIdx.x + 1);
-        acum += __shfl_down_sync(mask & overMask, acum, 1); // Reduction
+		acum += __shfl_down_sync(FULL_MASK, acum, 4); // Reduction
+		acum += __shfl_down_sync(HALF_MASK, acum, 2); // Reduction
+        acum += __shfl_down_sync(QUARTER_MASK, acum, 1); // Reduction
 
 		if (interiorId == 0) { // Final step and write results
 			C[row] = acum / (normA * c_norms[row]);
