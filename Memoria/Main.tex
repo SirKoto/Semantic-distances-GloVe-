@@ -14,6 +14,7 @@
 
 \pagestyle{fancy}
 \usepackage{tikz}
+\usepackage{nameref}
 \usepackage[hidelinks,colorlinks=true, linkcolor=blue,citecolor={blue},urlcolor=blue]{hyperref}
 \lhead{Projecte TGA: \textit{word2vec}}
 \rhead{Antoni Casas Muñoz\\Pol Martín Garcia}
@@ -73,9 +74,19 @@ Un cop el projecte ja es troba compilat, hi ha dues maneres d'executar el progra
 \end{itemize}
 La diferència entre les dues entrades és que la segona és notablement més ràpida que la primera, ja que no necessita dur a terme el \textit{parsing} dels nombres en coma flotant.
 
-Amb les dades carregades, s'imprimeixen per consola els temps i altra informació interessant sobre aquesta etapa, i s'inicia l'entrada de dades per a dur a terme computacions. Aquesta entrada ha de consistir d'una paraula arbitrària i d'un valor ${0,1}$. El valor identifica si s'ha d'executar també el còmput corresponent en CPU.
+Amb les dades carregades, s'imprimeixen per consola els temps i altra informació interessant sobre aquesta etapa, i s'inicia l'entrada de dades per a dur a terme computacions. \newline
+Aquesta entrada ha de consistir d'una paraula arbitrària i d'un valor ${0,1}$. El valor identifica si s'ha d'executar també el còmput corresponent en CPU.
 
-Per cada entrada de les anteriors, és dura a terme una cerca de la paraula introduïda en la base de dades. Si aquesta hi és, es procedirà a computar i escriure per consola les 10 paraules sintàcticament més semblants en la codificació \textit{word2vec}, així com diverses mètriques per avaluar l'eficiència de la consulta.
+A partir de la \nameref{sec:v3}, es pot també introduir una operació aritmètica amb sumes i restes entre paraules per buscar paraules amb relacions similars. Per a això s'introdueix l'anomenada operació finalitzada amb el símbol "!``, seguit del valor ${0,1}$ per executar el còmput corresponent a CPU.
+
+Aquí hi ha uns exemples d'entrada:
+\begin{itemize}
+	\item \verb|bottle 0|: computa les paraules més similars a \textit{bottle} a GPU.
+	\item \verb|snake 1|: computa tant a CPU com a GPU.
+	\item \verb|king - queen ! 0|: computa les paraules que tenen una relació similar a l'operació anterior, a GPU.
+\end{itemize}
+
+Per cada terme introduït, és dura a terme una cerca de la paraula introduïda en la base de dades. Si aquesta hi és, es procedirà a computar i escriure per consola les 10 paraules sintàcticament més semblants en la codificació \textit{word2vec}, així com diverses mètriques per avaluar l'eficiència de la consulta.
 
 El programa acaba quan es tanca la \textit{pipe} d'entrada.
 
@@ -96,54 +107,70 @@ Qualsevol dels algoritmes implementats per a solucionar aquest problema es basen
 Els punts 2 i 3, es troben tan implementats per a CPU, a \textit{main.cpp}, com per GPU, a \textit{kernel.cu}.
 
 \subsection*{Càlcul de similituds}
-El càlcul de les distàncies o similituds es du a terme a GPU pel kernel \verb|DotProduct()|, el qual calcula el producte escalar amb cadascun dels \textit{embeddings}, i posteriorment en divideix el resultat pel producte de normes.
+El càlcul de les distàncies o similituds es du a terme a GPU pel kernel \verb|DotProduct()|, el qual calcula el producte escalar amb cadascun dels \textit{embeddings}, i posteriorment en divideix el resultat pel producte de normes, segons l'equació anterior \ref{eq:cosSim}.
 
-Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment l'usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}, això es per fer ús de broadcast de memoria sobre els warps en una memòria de menor latència.
+Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòria \textit{shared}, i posteriorment l'usen tots els \textit{threads} del bloc per a dur a terme el producte escalar amb un altre \textit{embedding}, a més es pot fer ús de sincronització dins dels \textit{warps} per obtenir una memòria de menor latència (Vegeu millora de la \nameref{sec:v3}).
 
-D'aquesta manera cada \textit{thread} computa una sola similitud i inicialitza en el vector de posicions, la seva posició.
+D'aquesta manera, cada \textit{thread} computa una sola similitud i inicialitza en el vector de posicions la relació entre la distància i la paraula en el vector original.
 
 \subsection*{Filtrat i ordenació}
-El filtrat per GPU requereix conèixer les N+1 paraules amb una major similitud, N+1 ja que una paraula sempre serà la seva paraula més semblant. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
+El filtrat per GPU requereix conèixer les $N+1$ paraules amb una major similitud, $N+1$ ja que una paraula sempre serà la seva paraula més semblant. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
 
-La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de N+1 elements, els quals són ordenats usant ordenació per inserció donat que N+1 sempre serà un nombre petit. L'ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
-D'aquesta forma, obtenim el vector de similituds en trossos de N+1 elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector de índex a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
+La primera, \verb|FirstMerge()|, divideix el vector de similituds resultants en trossos de $N+1$ elements, els quals són ordenats usant ordenació per inserció donat que N+1 sempre serà un nombre petit. L'ordenació es du a terme \textit{on-place}, de manera que es reutilitza la mateixa memòria per emmagatzemar el resultat.\newline
+D'aquesta forma, obtenim el vector de similituds en trossos de $N+1$ elements internament ordenats. Evidentment, a part d'aquest vector de similituds s'emmagatzema un vector d'índexs a les paraules originals, per no perdre la relació entre valor de similitud i la respectiva paraula.
 
-Seguida i finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de N+1 elements preordenats en un de sol.\newline
+Finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de $N+1$ elements prèviament ordenats en un de sol.\newline
 Aquesta funció redueix el nombre de similituds a comparar a la meitat per cada crida, i es va usant fins que només resta un sol vector de N elements, el qual identifica les N paraules amb major similitud.
 
 \subsection*{Canvis de versió}
+Aquí es llisten les característiques i canvis de cada versió entregada del codi.
+\subsubsection*{Primera versió}
+La primera versió inclou la implementació més senzilla funcional de l'algoritme. Aquesta permet trobar les 10 paraules sintàcticament més properes a una única paraula introduïda.
+
+Les implementacions dels kernels i càrrega de dades no inclouen cap optimització, per tant aquesta versió és la menys eficient però la base del projecte.
+
+Inclou comparativa d'execució entre algoritme en CPU i GPU.
 \subsubsection*{Segona versió}
 
 Les millores en la segona versió del programa són separables en canvis en el codi del kernel, i en carrega de les dades a memòria.
 
 Pel que fa al kernel, s'ha reduït l'espai de memòria reservat, utilitzant memòria local de cada \textit{thread} per emmagatzemar l'ordenació temporal en el mètode \verb|BotchedMergeSort()|. A més, s'ha afegit control d'errors complet.
 
-Per altra banda, s'ha millorat substancialment la càrrega a memòria separant l'arxiu d'input en dos, un que conté els \textit{strings} de les paraules, i un altre que conté les normes i els \textit{embeddings} ja en binari, per estalviar la conversió a float en temps d'execució, a més que el fitxer és de menor mida en binari.
+Per altra banda, s'ha millorat substancialment la càrrega a memòria separant l'arxiu d'input en dos, un que conté els \textit{strings} de les paraules, i un altre que conté les normes i els \textit{embeddings} ja en binari, per estalviar la conversió a float en temps d'execució, a més que els fitxers són de menor mida en binari. Aquesta és la principal optimització d'aquesta versió.
 
 Finalment, s'ha afegit l'opció d'usar o no memòria \textit{pinned} segons una \textit{flag} de compilació.
 
 
-\subsubsection*{Tercera versió}
+\subsubsection*{Tercera versió}\label{sec:v3}
 
-La millora en la tercera versió es només un canvi en el kernel \verb|DotProduct|, on s'ha canviat els accessos a memòria per a provocar accessos amb coalescència, fent els accesos consecutius en 32 bytes. Per aquest propòsit, s'han destinat 8 threads per similitud a calcular, ja que els embeddings son floats, això provoca accessos contigus en memoria en 32 bytes, que es el límit actual de coalescència d'accesos a memoria en CUDA. Per evitar sincronitzacions en acumuladors s'ha fet ús de shared memory, alocant 4 bytes a a cada thread com a acumulador, reduïnt els 300 elements d'un embedding en 8, finalment sent reduïts utilitzant una reducció per unrolling.
+La millora en la tercera versió es basa un canvi en el kernel \verb|DotProduct|, perquè com es veurà a la següent secció \nameref{sec:results}, és el coll d'ampolla de l'algoritme. 
+
+En aquest s'han canviat els accessos a memòria per a provocar accessos amb coalescència, fent els accessos consecutius en 32 bytes. Per aquest propòsit, s'han destinat 8 threads per similitud a calcular, ja que els \textit{embeddings} són floats (4 bytes), això provoca accessos contigus en memòria en 32 bytes, que és el límit actual de coalescència d'accessos a memòria en CUDA. Vegeu $\frac{32 \text{ bytes}}{4 \frac{\text{bytes}}{float}} = 8 \text{ floats}$. D'aquesta manera, 8 threads d'un mateix warp s'ocuparan de computar una sola similitud, on cada thread accedeix un valor consecutiu a l'anterior.
+
+S'ha fet ús de shared memory, alocant 4 bytes a cada thread, com a acumulador, reduint els 300 elements d'un embedding en 8, finalment sent reduïts utilitzant una reducció per unrolling que culmina amb un únic thread dels 8 emmagatzemant la distància final a \textit{global memory}.
+
+Cal mencionar que ha estat necessari dur a terme sincronització a nivell de warp, ja que per molt que un warp s'executi sincronitzadament (sempre que no hi haguin divergències), la seva memòria compartida pot no estar-ho. Per a solucionar això s'ha usat \verb|__syncwarp();|.
+
+Per altra banda, aquesta versió inclou una nova funcionalitat, que és el càlcul de similituds amb operacions entre paraules, de manera que es poden trobar altres paraules amb relacions semblants. Això s'ha dut a terme programant un petit \textit{parser} per pila, i posteriorment computant l'operació amb els \textit{embeddings} de les paraules, i usant l'algoritme principal amb l'\textit{embedding} operat. 
 
 \subsubsection*{Quarta versió}
 
-En la quarta versió s'han tret els overheads innecesaris presents al codi, com reservar memoria i alliberar-la cada execució si aquesta podia ser reutilitzada.
+En la quarta versió s'han eliminat \textit{overheads} innecessaris presents al codi, com sincronitzacions explícites, reservar memòria i alliberar-la cada execució si aquesta podia ser reutilitzada. També s'ha editat el format d'output del programa per a diferenciar d'on s'obtenen els diversos temps.
+
+Més important, s'ha millorat altre cop el kernel \verb|DotProduct| lleugerament, eliminant l'ús de memòria compartida per als acumuladors, i usant sincronització entre registres d'un warp usant \verb|__shfl_down_sync()| en la reducció \cite{UsingCUD95:online}, que és més eficient que dur a terme sincronitzacions de memòria compartida.
 
 
-
-\section*{Resultats}
+\section*{Resultats}\label{sec:results}
 
 Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2.
 
 
-En la implementació seqüencial, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
+En la implementació seqüencial, com a mitjana de 10 execucions, el temps d'execució d'una cerca i càlcul és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
 
-En la primera implementació en CUDA, com a mitjana de 10 execucions, amb una mija de $261.4$ms per execució, amb un error estàndard de $5.19$ms, això indica que ha calculat $2196016$ distàncies a una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps es transferencia de dades, específicament el model de uns 2GB, que cada execució es transferit a la GPU, en total, uns $203$ ms son transferències de Host a Device, $22.6$ms son l'execució del kernel de DotProduct, $1.2$ms el kernel de BotchedMergeSort, i $0.9$ms el kernel de FirstMerge, la resta sent overheads. La transferència de dades es 10 vegades més significativa que el kernel més costós, per tant, s'ha de treure, ja que les dades son constants.
+En la primera implementació en CUDA, com a mitjana de 10 execucions, s'ha obtingut un temps de $261.4$ms per còmput, amb un error estàndard de $5.19$ms, això indica que ha calculat $2196016$ distàncies a una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps es transferencia de dades, específicament el model de uns 2GB, que cada execució es transferit a la GPU, en total, uns $203$ ms son transferències de Host a Device, $22.6$ms son l'execució del kernel de DotProduct, $1.2$ms el kernel de BotchedMergeSort, i $0.9$ms el kernel de FirstMerge, la resta sent overheads. La transferència de dades es 10 vegades més significativa que el kernel més costós, per tant, s'ha de treure, ja que les dades son constants.
 
 
-En la segona implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|), \verb|DotProduct()| ocupa uns 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
+En la segona implementació de CUDA, com a mitjana de 10 execucions, el temps obtingut és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|), \verb|DotProduct()| ocupa uns 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
 
 
 \begin{table}[h]
