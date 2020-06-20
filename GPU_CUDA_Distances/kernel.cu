@@ -7,8 +7,8 @@
 #include <assert.h>
 #include "GlobalHeader.h"
 #define FULL_MASK 0xffffffff
-#define HALF_MASK 0xf0f0f0f0
-#define QUARTER_MASK 0xc0c0c0c0
+#define HALF_MASK 0x0f0f0f0f
+#define QUARTER_MASK 0x03030303
 #define SINGULAR_MASK 0x80808080
 
 #define N_THREADS 1024
