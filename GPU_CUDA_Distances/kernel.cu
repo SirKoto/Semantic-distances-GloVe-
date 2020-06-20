@@ -29,26 +29,34 @@ embed_t* c_norms;
 __global__ void DotProduct
 (const int limit, const embed_t* A, embed_t* C, unsigned int* pos, const embed_t normA) {
 	__shared__ embed_t fastA[numEmbeds];
-	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
 	if (threadIdx.x < numEmbeds) {
 		fastA[threadIdx.x] = A[threadIdx.x]; // only one embeding is on A
 	}
 	__syncthreads();
 	if (id < limit) {
 		embed_t acum = 0;
-		unsigned int row = id / 8; // Get row
-		unsigned int interiorId = threadIdx.x % 8;  // Get id within row
+		const unsigned int row = id / 8; // Get row
+		const unsigned int interiorId = threadIdx.x % 8;  // Get id within row
 		for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
 			acum += fastA[i] * c_model[row].data[i]; // Accumulate within the accumulator
-		}        
-        acum += __shfl_down_sync(FULL_MASK, acum, 4); // Reduction
-        acum += __shfl_down_sync(FULL_MASK, acum, 2); // Reduction
-        acum += __shfl_down_sync(FULL_MASK, acum, 1); // Reduction
+		}
+		unsigned overMask = interiorId < 4 ? FULL_MASK : 0;
+		const unsigned tidMask = (1 << threadIdx.x);
+		unsigned mask = tidMask | (1 << threadIdx.x + 4);
+		acum += __shfl_down_sync(mask & overMask, acum, 4); // Reduction
+
+		overMask = interiorId < 2 ? FULL_MASK : 0;
+		mask = tidMask | (1 << threadIdx.x + 2);
+		acum += __shfl_down_sync(mask & overMask, acum, 2); // Reduction
+
+		overMask = interiorId == 0 ? FULL_MASK : 0;
+		mask = tidMask | (1 << threadIdx.x + 1);
+        acum += __shfl_down_sync(mask & overMask, acum, 1); // Reduction
 
 		if (interiorId == 0) { // Final step and write results
 			C[row] = acum / (normA * c_norms[row]);
 			pos[row] = row;
-
 		}
 	}
 }
