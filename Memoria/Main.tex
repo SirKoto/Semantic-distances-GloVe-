@@ -12,6 +12,11 @@
 \usepackage{fancyhdr}
 \usepackage[a4paper, total={6in, 8in}]{geometry}
 
+
+\usepackage{minted}
+\usepackage{mdframed}
+\surroundwithmdframed{minted}
+
 \pagestyle{fancy}
 \usepackage{tikz}
 \usepackage{nameref}
@@ -113,6 +118,7 @@ Això es du a terme movent el \textit{embeddings} de la paraula cercada a memòr
 
 D'aquesta manera, cada \textit{thread} computa una sola similitud i inicialitza en el vector de posicions la relació entre la distància i la paraula en el vector original.
 
+
 \subsection*{Filtrat i ordenació}
 El filtrat per GPU requereix conèixer les $N+1$ paraules amb una major similitud, $N+1$ ja que una paraula sempre serà la seva paraula més semblant. Per a això s'ha dividit el còmput d'aquest procés en dues funcions.
 
@@ -122,15 +128,34 @@ D'aquesta forma, obtenim el vector de similituds en trossos de $N+1$ elements in
 Finalment la funció \verb|BotchedMergeSort()| aprofita els segments ordenats per a dur a terme l'ordenació en una reducció del problema. Cada \textit{thread} compara dos dels pedaços de $N+1$ elements prèviament ordenats en un de sol.\newline
 Aquesta funció redueix el nombre de similituds a comparar a la meitat per cada crida, i es va usant fins que només resta un sol vector de N elements, el qual identifica les N paraules amb major similitud.
 
-\subsection*{Canvis de versió}
+\section*{Canvis de versió}
 Aquí es llisten les característiques i canvis de cada versió entregada del codi.
-\subsubsection*{Primera versió}
+\subsection*{Primera versió}
 La primera versió inclou la implementació més senzilla funcional de l'algoritme. Aquesta permet trobar les 10 paraules sintàcticament més properes a una única paraula introduïda.
 
 Les implementacions dels kernels i càrrega de dades no inclouen cap optimització, per tant aquesta versió és la menys eficient però la base del projecte.
 
 Inclou comparativa d'execució entre algoritme en CPU i GPU.
-\subsubsection*{Segona versió}
+
+\subsubsection*{Primera implementació del producte escalar}
+La primera implementació ha estat la més directe. Donat un cert nombre de distàncies a computar, corresponents al nombre d'\textit{embeddings} emmagatzemats, s'assigna un thread a cadascuna de les distàncies. D'aquesta manera no és necessari compartir informació en el bloc, més enllà de l'\textit{embedding} inicial que, com s'ha descrit anteriorment, es troba emmagatzemat a \textit{shared} com una constant.
+
+Així doncs, cada thread du a terme el producte escalar amb un determinat \textit{embedding} de memòria global, i a partir d'aquest en calcula la distància de cosinus final, i l'emmagatzema juntament amb la seva posició. 
+
+El següent codi n'és un abstracte simplificat, a on ja es té en memòria l'\textit{embedding} \mintinline{cuda}{embedCpy}, i es disposa de la seva norma \mintinline{cuda}{normA}; per altra banda hi ha els \textit{embeddings} del model \mintinline{cuda}{c_model} i les seves normes \mintinline{cuda}{c_norms}. 
+
+\begin{minted}[linenos,breaklines=true]{cuda}
+embed_t acum=0; // Acumulador del producte escalar
+for(unsigned i=0;i<numEmbeds;++i) {
+// Acumula el producte escalar amb el embedding escollit i un embedding determinat pel thread id
+acum += embedCpy[i] * c_model[idx].data[i];
+}
+// Computa la distància de cosinus
+distances[idx] = acum / (normA * c_norms[idx]);
+pos[idx] = idx; // Assigna posició
+\end{minted}
+
+\subsection*{Segona versió}
 
 Les millores en la segona versió del programa són separables en canvis en el codi del kernel, i en carrega de les dades a memòria.
 
@@ -141,23 +166,76 @@ Per altra banda, s'ha millorat substancialment la càrrega a memòria separant l
 Finalment, s'ha afegit l'opció d'usar o no memòria \textit{pinned} segons una \textit{flag} de compilació.
 
 
-\subsubsection*{Tercera versió}\label{sec:v3}
+\subsection*{Tercera versió}\label{sec:v3}
 
 La millora en la tercera versió es basa un canvi en el kernel \verb|DotProduct|, perquè com es veurà a la següent secció \nameref{sec:results}, és el coll d'ampolla de l'algoritme. 
 
-En aquest s'han canviat els accessos a memòria per a provocar accessos amb coalescència, fent els accessos consecutius en 32 bytes. Per aquest propòsit, s'han destinat 8 threads per similitud a calcular, ja que els \textit{embeddings} són floats (4 bytes), això provoca accessos contigus en memòria en 32 bytes, que és el límit actual de coalescència d'accessos a memòria en CUDA. Vegeu $\frac{32 \text{ bytes}}{4 \frac{\text{bytes}}{float}} = 8 \text{ floats}$. D'aquesta manera, 8 threads d'un mateix warp s'ocuparan de computar una sola similitud, on cada thread accedeix un valor consecutiu a l'anterior.
-
-S'ha fet ús de shared memory, alocant 4 bytes a cada thread, com a acumulador, reduint els 300 elements d'un embedding en 8, finalment sent reduïts utilitzant una reducció per unrolling que culmina amb un únic thread dels 8 emmagatzemant la distància final a \textit{global memory}.
-
-Cal mencionar que ha estat necessari dur a terme sincronització a nivell de warp, ja que per molt que un warp s'executi sincronitzadament (sempre que no hi haguin divergències), la seva memòria compartida pot no estar-ho. Per a solucionar això s'ha usat \verb|__syncwarp();|.
-
 Per altra banda, aquesta versió inclou una nova funcionalitat, que és el càlcul de similituds amb operacions entre paraules, de manera que es poden trobar altres paraules amb relacions semblants. Això s'ha dut a terme programant un petit \textit{parser} per pila, i posteriorment computant l'operació amb els \textit{embeddings} de les paraules, i usant l'algoritme principal amb l'\textit{embedding} operat. 
 
-\subsubsection*{Quarta versió}
+\subsubsection*{Segona versió del producte escalar}
+En aquest s'han canviat els accessos a memòria per a aprofitar accessos amb coalescència, fent els accessos consecutius en 32 bytes. Per aquest propòsit, s'han destinat 8 threads per similitud a calcular, ja que els \textit{embeddings} són floats (4 bytes), això provoca accessos contigus en memòria en 32 bytes, que és el límit actual de coalescència d'accessos a memòria en CUDA. Vegeu $\frac{32 \text{ bytes}}{4 \frac{\text{bytes}}{float}} = 8 \text{ floats}$. D'aquesta manera, 8 threads d'un mateix warp s'ocuparan de computar una sola similitud, on cada thread accedeix un valor consecutiu a l'anterior. Evidentment s'ha d'ajustar el nombre de blocs adequadament.
+
+S'ha fet ús de shared memory, reservant 4 bytes a cada thread com a acumulador, reduint els 300 elements d'un embedding en 8, finalment sent reduïts utilitzant una reducció per unrolling que culmina amb un únic thread dels 8 emmagatzemant la distància final a \textit{global memory}.
+
+Cal mencionar que ha estat necessari dur a terme sincronització a escala de warp, ja que per molt que un warp s'executi sincronitzadament (sempre que no hi haguin divergències), la seva memòria compartida pot no estar-ho. Per a solucionar això s'ha usat \verb|__syncwarp();|.
+\begin{minted}[linenos,breaklines=true]{cuda}
+unsigned row = idx / 8; // Index de l'embedding a computar
+unsigned interiorId = threadIdx.x % 8;  // Id dins de l'embedding
+partial[threadIdx.x] = 0;  // Inicialitza acumulador en shared
+// Computa solució parcial
+for (unsigned i = interiorId; i < numEmbeds; i += 8) {
+	partial[threadIdx.x] += embedCpy[i] * c_model[row].data[i];
+}
+// Sincronitza la memòria del warp sencer
+__syncwarp();
+// Reducció per reconstruir a partir de la solució parcial
+if (interiorId < 4) {
+	partial[threadIdx.x] += partial[threadIdx.x + 4];
+}
+__syncwarp();
+if (interiorId < 2) {
+	partial[threadIdx.x] += partial[threadIdx.x + 2];
+}
+__syncwarp();
+
+if (interiorId == 0) { // Finalment computar distancia i emmagatzemar
+	embed_t acum;
+	acum = partial[threadIdx.x] + partial[threadIdx.x + 1];
+	distances[row] = acum / (normA * c_norms[row]);
+	pos[row] = row;
+}
+\end{minted}
+\subsection*{Quarta versió}
 
 En la quarta versió s'han eliminat \textit{overheads} innecessaris presents al codi, com sincronitzacions explícites, reservar memòria i alliberar-la cada execució si aquesta podia ser reutilitzada. També s'ha editat el format d'output del programa per a diferenciar d'on s'obtenen els diversos temps.
 
-Més important, s'ha millorat altre cop el kernel \verb|DotProduct| lleugerament, eliminant l'ús de memòria compartida per als acumuladors, i usant sincronització entre registres d'un warp usant \verb|__shfl_down_sync()| en la reducció \cite{UsingCUD95:online}, que és més eficient que dur a terme sincronitzacions de memòria compartida.
+Més important, s'ha millorat altre cop el kernel \verb|DotProduct|, eliminant l'ús de memòria compartida per als acumuladors, i usant sincronització entre registres d'un warp.
+
+\subsubsection*{Tercera versió del producte escalar}
+Per a minimitzar la latència d'accessos a memòria es pot usar \verb|__shfl_down_sync()| en la reducció \cite{UsingCUD95:online}, que és més eficient que dur a terme sincronitzacions de memòria compartida. Aquesta funció sincronitza la memòria de certs threads, i en recupera la informació emmagatzemada en un registre d'un altre thread. D'aquesta manera podem millorar la reducció sense haver d'usar la memòria compartida a escala de bloc.\newline
+Cal dir que dur a terme aquesta reducció requereix l'ús de màscares de threads del warp a usar, i hem intentat generalitzar-les perquè estiguin disponibles en temps de compilació de manera eficient.
+\begin{minted}[linenos,breaklines=true]{cuda}
+embed_t acum = 0;
+unsigned row = id / 8; // Index de l'embedding a computar
+unsigned interiorId = threadIdx.x % 8;  // Id dins de l'embedding
+// Computa solució parcial
+for (unsigned int i = interiorId; i < numEmbeds; i += 8) {
+	acum += embedCpy[i] * c_model[row].data[i]; 
+}
+// Realitza les reduccions sobre el registre de la variable acum
+// FULL_MASK=0xFFFFFFFF, HALF_MASK=0x0F0F0F0F, QUARTER_MASK=0x03030303
+// Reducio amb tid i tid+4
+acum += __shfl_down_sync(FULL_MASK, acum, 4); 
+// Reducio amb tid i tid+2
+acum += __shfl_down_sync(HALF_MASK, acum, 2);
+// Reducio amb tid i tid+1
+acum += __shfl_down_sync(QUARTER_MASK, acum, 1);
+
+if (interiorId == 0) {
+	distances[row] = acum / (normA * c_norms[row]);
+	pos[row] = row;
+}
+\end{minted}
 
 
 \section*{Resultats}\label{sec:results}
