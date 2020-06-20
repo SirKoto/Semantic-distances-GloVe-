@@ -24,6 +24,7 @@ embedV_t* c_model;
 __device__ __constant__
 embed_t* c_norms;
 
+
 //rows determined as the amount of rows in a block
 // A is query vector, B is the model ( rows ), C is output matrix
 __global__ void DotProduct
