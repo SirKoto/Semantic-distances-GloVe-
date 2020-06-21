@@ -51,8 +51,8 @@ El problema a solucionar és la computació de similitud de paraules utilitzant 
 
 D'entre totes les operacions que es poden realitzar en un espai vectorial, una de les més senzilles i útils de computar és la distància de dos o més punts en l'espai, així com la cerca dels punts més propers a un altre punt concret d'entre les dades. D'aquesta manera, l'objectiu d'aquest treball és usar aquesta propietat per a poder computar distàncies semàntiques entre paraules, i cercar paraules per proximitat semàntica usant la representació vectorial d'aquestes.
 
-Mentre que per a convertir una paraula a la seva representació densa és tan simple com accedir a un diccionari i extreure el valor, sent un procés només intensiu en espai un cop el diccionari ja ha estat generat, presenten una complicació al fer la conversió de la representació densa (\textit{word2vec}) a la representació esparsa (el vocabulari de l'idioma en què \textit{word2vec} va ser entrenat) aquesta conversió és especialment difícil si s'han dut a terme operacions aritmètiques amb aquesta representació.\newline
-La manera de realitzar aquesta conversió és trobar la paraula, o paraules, més properes, i per això s'utilitza la similitud de cosinus. No s'empra la distància euclidiana típica, ja que aquesta mètrica ofereix poc significat en espais amb un gran nombre de dimensions, com és el cas de molts models \textit{word2vec}. En el nostre cas l'espai és de 300 dimensions, és a dir que cada paraula té una representació densa corresponent a un vector de 300 components, també anomenat \textit{embedding}, i per tant la distància euclidiana no seria una mètrica vàlida.
+Mentre que per a convertir una paraula a la seva representació densa és tan simple com accedir a un diccionari i extreure el valor, sent un procés només intensiu en espai un cop el diccionari ja ha estat generat, presenten una complicació al fer la conversió de la representació densa (\textit{word embeddings}) a la representació esparsa (el vocabulari de l'idioma en què els \textit{word embeddings} van ser entrenats) aquesta conversió és especialment difícil si s'han dut a terme operacions aritmètiques amb aquesta representació.\newline
+La manera de realitzar aquesta conversió és trobar la paraula, o paraules, més properes, i per això s'utilitza la similitud de cosinus. No s'empra la distància euclidiana típica, ja que aquesta mètrica ofereix poc significat en espais amb un gran nombre de dimensions, com és el cas de molts models de \textit{word embeddings}. En el nostre cas l'espai és de 300 dimensions, és a dir que cada paraula té una representació densa corresponent a un vector de 300 components, també anomenat \textit{embedding}, i per tant la distància euclidiana no seria una mètrica vàlida.
 
 La similitud de cosinus \cite{Cosinesi72:online} és una mètrica de similitud que és utilitzada per ser fàcil de computar, i oferir valors en el rang de $[-1,1]$, essent 1 el valor que indica absoluta similitud Aquesta mètrica es computa com amb la següent equació \ref{eq:cosSim}. La mètrica no mesura la distància en l'espai, sinó que mesura com són de paral·leles les representacions.
 \begin{equation} \label{eq:cosSim}
@@ -60,7 +60,7 @@ La similitud de cosinus \cite{Cosinesi72:online} és una mètrica de similitud q
 \end{equation}
 
 \subsubsection*{Canvis al model}
-Per a la implementació de l'algoritme, primer hem obtingut el model de \textit{word2vec} de \textit{GloVe} \cite{GloVeGlo18:online}, i l'hem modificat ordenant alfabèticament les paraules i afegint les normes de cada representació densa al model propi, d'aquesta manera no és necessari computar la norma en cada operació de similitud. També, s'ha fet una millora en implementacions consecutives, on el model són dos fitxers, un amb les paraules ordenades, i un altre fitxer binari amb les representacions denses emmagatzemades. El model llavors està format per unes $2.2\cdot 10^{6}$ paraules (concretament $2196016$ paraules), on cada paraula és una línia al fitxer, primer la paraula, després la norma, i finalment els 300 valors de la representació densa.	
+Per a la implementació de l'algoritme, primer hem obtingut el model de \textit{word embeddings} de \textit{GloVe} \cite{GloVeGlo18:online}, i l'hem modificat, ordenant alfabèticament les paraules i afegint les normes de cada representació densa al model propi, d'aquesta manera no és necessari computar la norma en cada operació de similitud. També, s'ha fet una millora en implementacions consecutives, on el model són dos fitxers, un amb les paraules ordenades, i un altre fitxer binari amb les representacions denses emmagatzemades. El model llavors està format per unes $2.2\cdot 10^{6}$ paraules (concretament $2196016$ paraules), on cada paraula és una línia al fitxer, primer la paraula, després la norma, i finalment els 300 valors de la representació densa.	
 
 És adient mencionar que cadascuna de les components de les representacions denses de les paraules es troba en el rang $[-1,1]$, d'aquesta manera s'obté una millora de precisió en emmagatzemar i operar amb nombres de coma flotant.
 
@@ -94,16 +94,13 @@ El programa acaba quan es tanca la \textit{pipe} d'entrada.
 \section*{Implementació}
 Hi ha quatre versions correctament implementades del projecte, amb resultats finals equivalents.\newline
 Aquestes versions també són equivalents al codi seqüencial, trobat al fitxer \textit{main.cpp} en la funció \verb|sequentialSearch()|. Aquesta, donat un vector d'\textit{embeddings}, l'índex d'un d'aquests, i un nombre N, troba d'entre tots els \textit{embeddings} del vector els N més semblants a l'\textit{embedding} identificat per l'índex. D'aquesta manera, aquest fitxer controla l'execució de tot el programa.
-
 Pel que fa a l'estructura del projecte hi ha els següents arxius, a part de \textit{main.cpp} però controlats per aquest, trobem els següents.
-
 \begin{itemize}
 	\item \textit{kernel.cu}: Fitxer CUDA amb funcions i mètodes enllaçables amb \verb|C| que permetent l'execució dels kernels per a dur a terme el còmput de distàncies amb un \textit{embedding}. També permet, en les seves respectives versions, precarregar memòria a la gràfica.
 	\item \textit{CudaHelp.cu}: Fitxer CUDA compatible amb \verb|C|, que inclou mètodes per a reservar memòria a la GPU des de codi \verb|C++|, tant \textit{pinned} com genèrica.
 	\item \textit{GlobalHeader.h:} Header que defineix tipus comuns entre arxius CUDA i \verb|C++|, com el tipus dels \textit{embeddings} i el seu emmagatzematge, de manera que les definicions són comunes entre els diferents arxius. Actualment defineix el tipus bàsic dels \textit{embeddings} com a float, ja que aquests es troben emmagatzemats en l'interval $[-1,1]$, i els floats ofereixen suficient resolució en aquest interval, a més de ser més ràpids que els double.
 	\item \textit{loader.h/cpp:} Classe per a carregar els diferents arxius a estructures compatibles amb el codi. A més inclou un algoritme de cerca binària usat per la versió seqüencial del algoritme.
 \end{itemize}
-
 \subsection*{Algoritme}
 Qualsevol dels algoritmes implementats per a solucionar aquest problema es basen en 3 parts.
 \begin{enumerate}
@@ -209,32 +206,21 @@ if (interiorId == 0) {
 \end{minted}
 \section*{Resultats}\label{sec:results}
 Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. 
-
 El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2. Per altra banda, els resultats aquí mostrats han estat obtinguts com a mitjana de 10 execucions sobre un set de $2196016$ \textit{embeddings}, per tant s'ha creat una nova mètrica per a computar el nombre de distàncies que es poden computar i filtrar per mil·lisegon $\frac{2196016}{\text{temps}}\frac{\text{distàncies}}{mil·lisegon}$.
-
 Seguidament se'n descriuen i justifiquen les diferents millores en cadascuna de les versions. Els resultats es troben resumits en les taules, a la pàgina \pageref{tb:keys}. La taula \ref{tb:keys} compara els temps entre diverses execucions en funció de la paraula, \ref{tb:speedup} en mostra el \textit{speedup} entre versions, i \ref{tb:kernels} un resum dels temps d'execució.
-
 Cal dir també que tot i que s'ha millorat la velocitat de càrrega de dades en la segona versió del programa, aquesta millora no ha estat avaluada, ja que no depèn de la GPU.
-
 \subsubsection*{Seqüencial}
 En la implementació seqüencial, el temps d'execució d'una consulta és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
-
 \subsubsection*{Primera implementació}
 En la primera implementació en CUDA, amb una mija de $261.4$ms per execució i un error estàndard de $5.19$ms, indica que ha calculat una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps és transferència de dades, específicament el model d'uns 2GB que és transferit a la GPU a cada execució. En total $203$ms són transferències de Host a Device, $22.6$ms són l'execució del kernel de \verb|DotProduct()|, $1.6$ms el kernel de \verb|BotchedMergeSort()|, i $1$ms el kernel de \verb|FirstMerge()|, la resta sent overheads.
-
 La transferència de dades és 10 vegades més significativa que el kernel més costós, per tant s'ha extret en següents versions, ja que aquestes dades són constants entre execucions.
-
 \subsubsection*{Segona implementació}
-En la segona implementació de CUDA, el temps d'execució d'una consulta és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
-
+En la segona implementació de CUDA, el temps d'execució d'una consulta és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 22ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
 \subsubsection*{Tercera implementació}
 En la tercera implementació de CUDA, el temps d'execució d'una cerca és de $17$ms, amb un error estàndard de $0$ms, això significa que ha dut a terme el còmput a una velocitat de $129177.41$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.6ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
-
 El kernel \verb|DotProduct()| ha tingut una millora significant, gràcies als accessos amb coalescència a la memòria.
-
 \subsubsection*{Quarta implementació}
 En la quarta implementació de CUDA, el temps d'execució d'una cerca és de $10$ms, amb un error estàndard de $0$ms, això significa que ha calculat les $2196016$ distàncies a una velocitat de $219601.6$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.5ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
-
 És una millora molt lleugera respecte a la tercera implementació pel que fa als temps d'execució dels kernels; la millora en aquest cas ha estat en els \textit{overheads} reduïts i la reutilització absoluta de tota reserva de memòria a la GPU, no essent mai necessari alliberar memòria entre execucions consecutives.
  
 \begin{table}[!h]
@@ -268,21 +254,19 @@ Quarta implementació & 242.59 & 1.7 & 219601.6 \\ \hline
 \end{tabular}
 \caption{Evolució de la millora entre les diverses versions. La mètrica "distàncies per ms`` ha estat calculada com a $\frac{2196016}{\text{temps}}$.} \label{tb:speedup}
 \end{table}
-
 \begin{table}[!h]
 \centering
 \begin{tabular}{|l|l|l|l|l|l|}
 \hline
 	& \verb|DotProduct()| & \verb|FirstMerge()| & \verb|BotchedMergeSort()| & Overhead & Total\\ \hline
 V1	& 22.6ms	& 1ms 	& 1.6ms 	& 236.2ms 	& 261.4ms 	\\ \hline
-V2	& 22ms		& 0.8ms & 1.3ms 	& 12.7ms 	& 36.8ms 	\\ \hline
+V2	& 22ms		& 1ms & 1.6ms 	& 12.2ms 	& 36.8ms 	\\ \hline
 V3	& 6.6ms		& 1ms 	& 1.6ms 	& 7.8ms 	& 17ms 		\\ \hline
 V4	& 6.5ms		& 1ms 	& 1.6ms 	& 0.9ms 	& 10ms 		\\ \hline
 	
 \end{tabular}
 \caption{Comparativa de la distribució de temps entre les diverses components de les versions.} \label{tb:kernels}
 \end{table}
-
 \section*{Millores descartades}
 Per aprofitar el fet que un \textit{fetch} de memòria global a cache és de 128 bytes segons \cite{nvidiaDeveloperDoc}, es va implementar coalescència de memòria als 128 bytes, 64 bytes i 16 bytes, en comptes dels 32 presents a l'última versió. Això va produir resultats 5ms més lents, aproximadament. Aquest fet creiem que és degut a la cache, ja que amb el model d'execució actual, tot warp agafa 4 línies de cache i itera sobre elles, provocant 4 hits per línia abans de demanar noves, que permet una millor utilització de la cache que amb el model de coalescència a 128, 64 o 16 bytes.
 També es va implementar una diferent sincronització intra-warp, utilitzant una màscara sencera en la primera fase de la reducció i 0 en la resta, però CUDA no afirma que un warp es mantingui convergent fins que s'arribi a una zona divergent en el codi, vegeu \cite{warpPrimitives}, així que aquesta menor optimització es va eliminar a favor de posar les mascares explícites, i no sincronització implícita.
