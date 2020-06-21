@@ -198,26 +198,34 @@ if (interiorId == 0) {
 }
 \end{minted}
 \section*{Resultats}\label{sec:results}
-Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2.
+Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a targeta gràfica, utilitzant un slot x16 PCIe 3.0, Intel I5-9600K com a CPU, i els models guardats en una NVME, Samsung 970 EVO, amb suficient RAM DDR4 per a no observar \textit{thrashing}. 
 
-\subsubsection*{Secuencial}
-En la implementació seqüencial, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
+El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2. Per altra banda, els resultats aquí mostrats han estat obtinguts com a mitjana de 10 execucions sobre un set de $2196016$ \textit{embeddings}, per tant s'ha creat una nova mètrica per a computar el nombre de distàncies que es poden computar i filtrar per mil·lisegon $\frac{2196016}{\text{temps}}\frac{\text{distàncies}}{mil·lisegon}$.
+
+Seguidament se'n descriuen i justifiquen les diferents millores en cadascuna de les versions. Els resultats es troben resumits en les taules, a la pàgina \pageref{tb:keys}. La taula \ref{tb:keys} compara els temps entre diverses execucions en funció de la paraula, \ref{tb:speedup} en mostra el \textit{speedup} entre versions, i \ref{tb:kernels} un resum dels temps d'execució.
+
+\subsubsection*{Seqüencial}
+En la implementació seqüencial, el temps d'execució d'una consulta és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
 
 \subsubsection*{Primera implementació}
-En la primera implementació en CUDA, com a mitjana de 10 execucions, amb una mija de $261.4$ms per execució, amb un error estàndard de $5.19$ms, això indica que ha calculat $2196016$ distàncies a una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps es transferencia de dades, específicament el model de uns 2GB, que cada execució es transferit a la GPU, en total, uns $203$ ms son transferències de Host a Device, $22.6$ms son l'execució del kernel de DotProduct, $1.6$ms el kernel de BotchedMergeSort, i $1$ms el kernel de FirstMerge, la resta sent overheads. La transferència de dades es 10 vegades més significativa que el kernel més costós, per tant, s'ha de treure, ja que les dades son constants.
+En la primera implementació en CUDA, amb una mija de $261.4$ms per execució i un error estàndard de $5.19$ms, indica que ha calculat una velocitat de $8400.98$ distàncies per ms. En aquesta implementació, la gran majoria del temps és transferència de dades, específicament el model d'uns 2GB que és transferit a la GPU a cada execució. En total $203$ms són transferències de Host a Device, $22.6$ms són l'execució del kernel de \verb|DotProduct()|, $1.6$ms el kernel de \verb|BotchedMergeSort()|, i $1$ms el kernel de \verb|FirstMerge()|, la resta sent overheads.
+
+La transferència de dades és 10 vegades més significativa que el kernel més costós, per tant s'ha extret en següents versions, ja que aquestes dades són constants entre execucions.
 
 \subsubsection*{Segona implementació}
-En la segona implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|), \verb|DotProduct()| ocupa uns 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
+En la segona implementació de CUDA, el temps d'execució d'una consulta és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 22ms, \verb|FirstMerge()| 0.8ms, i \verb|BotchedMergeSort()| 1.3ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
 
 \subsubsection*{Tercera implementació}
-En la tercera implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $17$ms, amb un error estàndard de $0$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $129177.41$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|). \verb|DotProduct()| ocupa uns 6.6ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. El kernel \verb|DotProduct()| ha tingut una millora significant, gracies als accessos amb coalescència a la memòria.
+En la tercera implementació de CUDA, el temps d'execució d'una cerca és de $17$ms, amb un error estàndard de $0$ms, això significa que ha dut a terme el còmput a una velocitat de $129177.41$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.6ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
+
+El kernel \verb|DotProduct()| ha tingut una millora significant, gràcies als accessos amb coalescència a la memòria.
 
 \subsubsection*{Quarta implementació}
-En la quarta implementació de CUDA, com a mitjana de 10 execucions, el temps d'execució d'una cerca és de $10$ms, amb un error estàndard de $0$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $219601.6$ distàncies calculades per ms. De els 3 kernels (\verb|DotProduct()|, \verb|FirstMerge()| i \verb|BotchedMergeSort()|). \verb|DotProduct()| ocupa uns 6.5ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. Es una millora molt lleugera respecta a la tercera implementació respecte els temps de execució dels kernels, la millora en aquest cas es en els overheads reduïts i la reutilització absoluta de tota reserva de memòria a la GPU, no fent free mai.
+En la quarta implementació de CUDA, el temps d'execució d'una cerca és de $10$ms, amb un error estàndard de $0$ms, això significa que ha calculat les $2196016$ distàncies a una velocitat de $219601.6$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.5ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
 
-\subsubsection*{Taules comparatives}
-
-\begin{table}[h]
+És una millora molt lleugera respecte a la tercera implementació pel que fa als temps d'execució dels kernels; la millora en aquest cas ha estat en els \textit{overheads} reduïts i la reutilització absoluta de tota reserva de memòria a la GPU, no essent mai necessari alliberar memòria entre execucions consecutives.
+ 
+\begin{table}[!h]
 \centering
 \begin{tabular}{|l|l|l|l|l|l|}
 \hline
@@ -233,8 +241,9 @@ ring  & 2419ms & 276ms & 35ms & 17ms & 10ms\\ \hline
 barca & 2414ms & 238ms & 35ms & 17ms & 10ms\\ \hline
 messi & 2453ms & 266ms & 35ms & 17ms & 10ms\\ \hline
 \end{tabular}
+\caption{Comparativa de temps d'execució amb diferents entrades. L'ordre d'execució ha estat consecutiu de dalt a baix, per a veure si la repetició d'execucions afectava.}\label{tb:keys}
 \end{table}
-\begin{table}[h]
+\begin{table}[!h]
 \centering
 \begin{tabular}{|l|l|l|l|}
 \hline
@@ -245,11 +254,26 @@ Segona implementació & 65.92 & 7.10 & 59674.3  \\ \hline
 Tercera implementació & 142.7 & 2.16 & 129177.41  \\ \hline
 Quarta implementació & 242.59 & 1.7 & 219601.6 \\ \hline
 \end{tabular}
+\caption{Evolució de la millora entre les diverses versions. La mètrica "distàncies per ms`` ha estat calculada com a $\frac{2196016}{\text{temps}}$.} \label{tb:speedup}
+\end{table}
+
+\begin{table}[!h]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|}
+\hline
+	& \verb|DotProduct()| & \verb|FirstMerge()| & \verb|BotchedMergeSort()| & Overhead & Total\\ \hline
+V1	& 22.6ms	& 1ms 	& 1.6ms 	& 236.2ms 	& 261.4ms 	\\ \hline
+V2	& 22ms		& 0.8ms & 1.3ms 	& 12.7ms 	& 36.8ms 	\\ \hline
+V3	& 6.6ms		& 1ms 	& 1.6ms 	& 7.8ms 	& 17ms 		\\ \hline
+V4	& 6.5ms		& 1ms 	& 1.6ms 	& 0.9ms 	& 10ms 		\\ \hline
+	
+\end{tabular}
+\caption{Comparativa de la distribució de temps entre les diverses components de les versions.} \label{tb:kernels}
 \end{table}
 
 \section*{Millores descartades}
-Per aprofitar el fet que un fetch de memòria global a cache es de 128 bytes \cite{nvidiaDeveloperDoc}, es va implementar coalescència de memòria als 128 bytes, 64 bytes i 16 bytes, en comptes dels 32 presents a la ultima versió. Això va donar a resultats uns 5 ms pitjors. Això creiem que es degut a la cache, ja que amb el model de execució actual, tot warp agafa 4 línies de cache i itera sobre elles, provocant 4 hits per línia abans de demanar noves, que permetria una millor utilització de la cache que amb el model de coalescència a 128, 64 o 16 bytes.
-També es va implementar una diferent sincronització intra-warp, utilitzant una màscara sencera en la primera fase de la reducció i 0 en la resta, però CUDA no afirma que un warp es mantingui convergent fins que s'arribi a una zona divergent en el codi \cite{warpPrimitives}, així que aquesta menor optimització es va treure a favor de posar les masks explícites i no sincronització implícita.
+Per aprofitar el fet que un \textit{fetch} de memòria global a cache és de 128 bytes segons \cite{nvidiaDeveloperDoc}, es va implementar coalescència de memòria als 128 bytes, 64 bytes i 16 bytes, en comptes dels 32 presents a l'última versió. Això va produir resultats 5ms més lents, aproximadament. Aquest fet creiem que és degut a la cache, ja que amb el model d'execució actual, tot warp agafa 4 línies de cache i itera sobre elles, provocant 4 hits per línia abans de demanar noves, que permet una millor utilització de la cache que amb el model de coalescència a 128, 64 o 16 bytes.
+També es va implementar una diferent sincronització intra-warp, utilitzant una màscara sencera en la primera fase de la reducció i 0 en la resta, però CUDA no afirma que un warp es mantingui convergent fins que s'arribi a una zona divergent en el codi, vegeu \cite{warpPrimitives}, així que aquesta menor optimització es va eliminar a favor de posar les mascares explícites, i no sincronització implícita.
 \newpage
 \bibliographystyle{ieeetr}
 \bibliography{biblio}
