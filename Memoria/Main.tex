@@ -216,13 +216,16 @@ En la primera implementació en CUDA, amb una mija de $261.4$ms per execució i 
 La transferència de dades és 10 vegades més significativa que el kernel més costós, per tant s'ha extret en següents versions, ja que aquestes dades són constants entre execucions.
 \subsubsection*{Segona implementació}
 En la segona implementació de CUDA, el temps d'execució d'una consulta és de $36.8$ms, amb un error estàndard de $1.58$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $59674.3$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 22ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms, la resta de temps essent overhead, per tant \verb|FirstMerge()| i \verb|BotchedMergeSort()| es poden considerar negligibles comparat amb \verb|DotProduct()|.
+
+En aquesta versió no hi ha millores notables pel que fa als kernels, però hi ha una immensa millora en el temps d'\textit{overheads} (vegeu taula \ref{tb:kernels})  ja que s'ha extret la carrega sistemàtica del model a cada execució de l'algoritme. Hi ha una petita millora en el kernel de \verb|DotProduct()| a l'usar memòria constant, ja que el compilador pot optimitzar els patrons d'accés.
 \subsubsection*{Tercera implementació}
 En la tercera implementació de CUDA, el temps d'execució d'una cerca és de $17$ms, amb un error estàndard de $0$ms, això significa que ha dut a terme el còmput a una velocitat de $129177.41$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.6ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
-El kernel \verb|DotProduct()| ha tingut una millora significant, gràcies als accessos amb coalescència a la memòria.
+
+El kernel \verb|DotProduct()| ha tingut una millora significant, gràcies als accessos amb coalescència a la memòria i a la sincronització a escala de warp. Reduir tot tipus de sincronitzacions al bloc, i coordinar els accessos a memòria entre threads consecutius ha resultat ser molt significatiu.
 \subsubsection*{Quarta implementació}
-En la quarta implementació de CUDA, el temps d'execució d'una cerca és de $10$ms, amb un error estàndard de $0$ms, això significa que ha calculat les $2196016$ distàncies a una velocitat de $219601.6$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.5ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms. 
-És una millora molt lleugera respecte a la tercera implementació pel que fa als temps d'execució dels kernels; la millora en aquest cas ha estat en els \textit{overheads} reduïts i la reutilització absoluta de tota reserva de memòria a la GPU, no essent mai necessari alliberar memòria entre execucions consecutives.
+En la quarta implementació de CUDA, el temps d'execució d'una cerca és de $10$ms, amb un error estàndard de $0$ms, això significa que ha calculat les $2196016$ distàncies a una velocitat de $219601.6$ distàncies calculades per ms. Dels 3 kernels, \verb|DotProduct()| ocupa 6.5ms, \verb|FirstMerge()| 1ms, i \verb|BotchedMergeSort()| 1.6ms.
  
+És una millora molt lleugera respecte a la tercera implementació pel que fa als temps d'execució dels kernels; la millora en aquest cas ha estat en els \textit{overheads} reduïts i la reutilització absoluta de tota reserva de memòria a la GPU, no essent mai necessari alliberar memòria entre execucions consecutives.
 \begin{table}[!h]
 \centering
 \begin{tabular}{|l|l|l|l|l|l|}
@@ -270,6 +273,15 @@ V4	& 6.5ms		& 1ms 	& 1.6ms 	& 0.9ms 	& 10ms 		\\ \hline
 \section*{Millores descartades}
 Per aprofitar el fet que un \textit{fetch} de memòria global a cache és de 128 bytes segons \cite{nvidiaDeveloperDoc}, es va implementar coalescència de memòria als 128 bytes, 64 bytes i 16 bytes, en comptes dels 32 presents a l'última versió. Això va produir resultats 5ms més lents, aproximadament. Aquest fet creiem que és degut a la cache, ja que amb el model d'execució actual, tot warp agafa 4 línies de cache i itera sobre elles, provocant 4 hits per línia abans de demanar noves, que permet una millor utilització de la cache que amb el model de coalescència a 128, 64 o 16 bytes.
 També es va implementar una diferent sincronització intra-warp, utilitzant una màscara sencera en la primera fase de la reducció i 0 en la resta, però CUDA no afirma que un warp es mantingui convergent fins que s'arribi a una zona divergent en el codi, vegeu \cite{warpPrimitives}, així que aquesta menor optimització es va eliminar a favor de posar les mascares explícites, i no sincronització implícita.
+
+\section*{Conclusions}
+Podem considerar que hem aconseguit acabar aquest treball amb resultats més que favorables, amb un \textit{speedup} de fins a x242. Per altra banda també hem pogut aprofitar un model de dades molt interessant, i produir una aplicació de fàcil ús que considerem ser interessant, i fàcilment ampliable a altres camps semblants que requereixen còmput sobre una base de dades.
+
+Més enllà dels continguts del projecte, aquest ens ha induït a aprofundir en el funcionament de les targetes gràfiques més enllà dels continguts vists en l'assignatura, doncs vam arribar a un punt en què desconeixíem com poder millorar més la nostra implementació. D'aquesta manera, s'ha investigat i vist més patrons per accedir a la informació, i coordinar l'accés a aquesta per a ser el més eficient possible, així com sincronitzar les reduccions amb el menor impacte que hem estat capaços d'assolir.
+
+Finalitzem el projecte de manera satisfactòria, i sens dubte aplicarem les tècniques apreses i coneixements adquirits a nous futurs projectes.
+
+
 \newpage
 \bibliographystyle{ieeetr}
 \bibliography{biblio}
