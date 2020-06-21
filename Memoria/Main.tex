@@ -92,8 +92,18 @@ Aquí hi ha uns exemples d'entrada:
 Per cada terme introduït, és dura a terme una cerca de la paraula introduïda en la base de dades. Si aquesta hi és, es procedirà a computar i escriure per consola les 10 paraules sintàcticament més semblants en la codificació \textit{word2vec}, així com diverses mètriques per avaluar l'eficiència de la consulta.
 El programa acaba quan es tanca la \textit{pipe} d'entrada.
 \section*{Implementació}
-Hi ha quatre versions correctament implementades del projecte, amb resultats finals equivalents.
-Aquestes versions també són equivalents al codi seqüencial, trobat al fitxer \textit{main.cpp} en la funció \verb|sequentialSearch()|. Aquesta, donat un vector d'\textit{embeddings}, l'índex d'un d'aquests, i un nombre N, troba d'entre tots els \textit{embeddings} del vector els N més semblants a l'\textit{embedding} identificat per l'índex.
+Hi ha quatre versions correctament implementades del projecte, amb resultats finals equivalents.\newline
+Aquestes versions també són equivalents al codi seqüencial, trobat al fitxer \textit{main.cpp} en la funció \verb|sequentialSearch()|. Aquesta, donat un vector d'\textit{embeddings}, l'índex d'un d'aquests, i un nombre N, troba d'entre tots els \textit{embeddings} del vector els N més semblants a l'\textit{embedding} identificat per l'índex. D'aquesta manera, aquest fitxer controla l'execució de tot el programa.
+
+Pel que fa a l'estructura del projecte hi ha els següents arxius, a part de \textit{main.cpp} però controlats per aquest, trobem els següents.
+
+\begin{itemize}
+	\item \textit{kernel.cu}: Fitxer CUDA amb funcions i mètodes enllaçables amb \verb|C| que permetent l'execució dels kernels per a dur a terme el còmput de distàncies amb un \textit{embedding}. També permet, en les seves respectives versions, precarregar memòria a la gràfica.
+	\item \textit{CudaHelp.cu}: Fitxer CUDA compatible amb \verb|C|, que inclou mètodes per a reservar memòria a la GPU des de codi \verb|C++|, tant \textit{pinned} com genèrica.
+	\item \textit{GlobalHeader.h:} Header que defineix tipus comuns entre arxius CUDA i \verb|C++|, com el tipus dels \textit{embeddings} i el seu emmagatzematge, de manera que les definicions són comunes entre els diferents arxius. Actualment defineix el tipus bàsic dels \textit{embeddings} com a float, ja que aquests es troben emmagatzemats en l'interval $[-1,1]$, i els floats ofereixen suficient resolució en aquest interval, a més de ser més ràpids que els double.
+	\item \textit{loader.h/cpp:} Classe per a carregar els diferents arxius a estructures compatibles amb el codi. A més inclou un algoritme de cerca binària usat per la versió seqüencial del algoritme.
+\end{itemize}
+
 \subsection*{Algoritme}
 Qualsevol dels algoritmes implementats per a solucionar aquest problema es basen en 3 parts.
 \begin{enumerate}
@@ -203,6 +213,8 @@ Els resultats han sigut obtinguts en una màquina amb una GTX 2060 SUPER com a t
 El sistema no té límits a \textit{pinned memory}, per tant totes les execucions s'han fet utilitzant \textit{pinned memory} i amb CUDA 10.2. Per altra banda, els resultats aquí mostrats han estat obtinguts com a mitjana de 10 execucions sobre un set de $2196016$ \textit{embeddings}, per tant s'ha creat una nova mètrica per a computar el nombre de distàncies que es poden computar i filtrar per mil·lisegon $\frac{2196016}{\text{temps}}\frac{\text{distàncies}}{mil·lisegon}$.
 
 Seguidament se'n descriuen i justifiquen les diferents millores en cadascuna de les versions. Els resultats es troben resumits en les taules, a la pàgina \pageref{tb:keys}. La taula \ref{tb:keys} compara els temps entre diverses execucions en funció de la paraula, \ref{tb:speedup} en mostra el \textit{speedup} entre versions, i \ref{tb:kernels} un resum dels temps d'execució.
+
+Cal dir també que tot i que s'ha millorat la velocitat de càrrega de dades en la segona versió del programa, aquesta millora no ha estat avaluada, ja que no depèn de la GPU.
 
 \subsubsection*{Seqüencial}
 En la implementació seqüencial, el temps d'execució d'una consulta és de $2425.9$ms, amb un error estàndard de $7.91$ms, això significa que ha calculat $2196016$ distàncies a una velocitat de $905.2$ distàncies calculades per ms. 
